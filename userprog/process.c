@@ -17,11 +17,14 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 #define LOGGING_LEVEL 6
 
 #include <log.h>
 
+struct semaphore launched;
+struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -47,11 +50,16 @@ process_execute (const char *command)
   if (cmd_copy == NULL)
     return TID_ERROR;
   strlcpy (cmd_copy, command, PGSIZE);
-
+  //This semaphore should really be in the thread control block (thread structure)
+  //Here its in the OS so if there are multiple processes running it would cause chaos
+  sema_init(&launched, 0); //should be t->launched
+  sema_init(&exiting, 0); //should be t->exiting
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (command, PRI_DEFAULT, start_process, cmd_copy);
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
+
+  sema_down(&launched);
   return tid;
 }
 
@@ -74,10 +82,11 @@ start_process (void *command)
   success = load (executable, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (executable);
+  palloc_free_page (command);
   if (!success)
     thread_exit ();
 
+  sema_up(&launched);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -101,7 +110,9 @@ int
 process_wait (tid_t child_tid UNUSED)
 {
   // Need to wait for the child to exit and then reap the childs exit status
-  while(1);
+  sema_down(&exiting);
+  //here means child has exited
+  //need to get childs exit status from its thread and then return that
   //return -1;
 }
 
@@ -128,6 +139,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+    sema_up(&exiting);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -447,12 +459,13 @@ static bool
 setup_stack (const char *cmdstr, void **esp)
 {
   uint8_t *kpage;
-  char *espchar, argv0ptr;
+  char *espchar, *argv0ptr;
   uint32_t *espword;
   bool success = false;
 
   log(L_TRACE, "setup_stack()");
-
+  //This current implementation is just a hack to pass args-none
+  //Need to parse input to actually get it to pass
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
