@@ -72,11 +72,21 @@ process_execute (const char *command)
 static void
 start_process (void *command)
 {
-  char *executable = command;
+  char *executable;
   struct intr_frame if_;
   bool success;
 
   log(L_TRACE, "start_process()");
+
+  int argCount = get_arg_count(command);
+
+  if(argCount > 1){
+    char *token, *save_ptr;
+    token = strtok_r (command, " ", &save_ptr);
+    executable = token;
+  } else {
+    executable = command; 
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -565,6 +575,16 @@ int get_arg_count(const char *cmdstr){
   char *buffer, *token, *save_ptr;
   buffer = malloc(strlen(cmdstr) + 1);
   strlcpy(buffer, cmdstr, strlen(cmdstr) + 1);
+
+  // Example usage:
+
+  //  char s[] = "  String to  tokenize. ";
+  //  char *token, *save_ptr;
+
+  //  for (token = strtok_r (s, " ", &save_ptr); token != NULL;
+  //       token = strtok_r (NULL, " ", &save_ptr))
+  //    printf ("'%s'\n", token);
+
   for (token = strtok_r((char *)buffer, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
       argc++;
   }
