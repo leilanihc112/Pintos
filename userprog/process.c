@@ -28,6 +28,10 @@ struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+void allocate_stack_argv(const char *cmdstr, void **esp, int argc, char **argv);
+int get_arg_count(const char *cmdstr);
+void stack_padding(const char *argument, void **esp);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -249,6 +253,13 @@ load (const char *cmdstr, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  // int count = get_arg_count(cmdstr);
+  // printf("%s", "**********************************\n");
+  // printf("%d", count);
+  // printf("%s", "\n");
+  // printf("%s", cmdstr);
+  // printf("%s", "\n**********************************\n");
+
   file = filesys_open (cmdstr);
   if (file == NULL)
     {
@@ -459,9 +470,11 @@ static bool
 setup_stack (const char *cmdstr, void **esp)
 {
   uint8_t *kpage;
-  char *espchar, *argv0ptr;
-  uint32_t *espword;
   bool success = false;
+
+  char *espchar, *argv0ptr;
+   uint32_t *espword;
+
 
   log(L_TRACE, "setup_stack()");
   //This current implementation is just a hack to pass args-none
@@ -473,27 +486,40 @@ setup_stack (const char *cmdstr, void **esp)
       if (success) {
         //This is 1:11 in the 1st video
         //We're setting up the stack here
-        int len = strlen(cmdstr) + 1;
+        //example args-none
         *esp = PHYS_BASE;
-        *esp -= len;
-        strlcpy(*esp, cmdstr, len); //Copying the cmd string to the stack
+        int argc = get_arg_count(cmdstr);
+        char **argv = malloc((argc + 1) * sizeof(char *));
+        //char **argv = malloc((argc + 1) * sizeof(char *));
+        allocate_stack_argv(cmdstr, esp, argc, argv);
+
         espchar = (char *)(*esp); // This is where argv0ptr is
-        argv0ptr = espchar;
-        espchar--;
-        *espchar = 0; //NOTE: This is a hack just for args none, we're padding twice here 
-        espchar--;
-        *espchar = 0; // Refer to stack diagram again to understand
-        *esp -= 6; //Padding + Null Pointer
+        argv0ptr = argv[0]; // argv[0]
+
+        // espchar--;
+        // *espchar = 0; //NOTE: This is a hack just for args none, we're padding twice here 
+        // espchar--;
+        // *espchar = 0; // Refer to stack diagram again to understand
+        // *esp -= 6; //Padding + Null Pointer
+
+        *esp-=4; //Move back to the argv[1] location
         espword = (uint32_t *)(*esp);
-        *espword = 0;
+
+        if(argc < 2){
+          *espword = 0; // If argc == 1 set argv[1] to NULL or 0
+        } else {
+          *espword = argv[1]; // Else set equal to argv[1]
+        }
+
         espword--;
         *espword = argv0ptr;
-        char *argvptr = espword;
+
+        char *argvptr = espword; //argv
         *esp -= 8; 
         espword = (uint32_t *)(*esp);
         *espword = argvptr; //argv points to argv[0]
         espword--;
-        *espword = 1; // this is argc
+        *espword = argc; // this is argc
         espword--;
         *espword = 0; //return address
         *esp = espword;
@@ -505,6 +531,45 @@ setup_stack (const char *cmdstr, void **esp)
 	  // hex_dump( *(int*)esp, *esp, 128, true ); // NOTE: uncomment this to check arg passing
     }
   return success;
+}
+
+void allocate_stack_argv(const char *cmdstr, void **esp, int argc, char **argv){
+   char *argument, *save_ptr;
+
+   int i = 0;
+   for (argument = strtok_r((char *)cmdstr, " ", &save_ptr); argument != NULL; argument = strtok_r(NULL, " ", &save_ptr)) {
+    int len = strlen(argument) + 1;
+    *esp -= len;
+    argv[i] = *esp;
+    stack_padding(argument, *esp);
+    i++;
+    strlcpy(*esp, argument, len);
+  } //
+
+  argv[argc] = 0;
+}
+
+
+void stack_padding(const char *argument, void **esp){
+  int num_pads = (int) (strlen(argument) + 1) % 4;
+
+  int i = 0;
+  for(i; i < num_pads; i++){
+    *esp--;
+    *esp = 0;
+  }
+}
+
+int get_arg_count(const char *cmdstr){
+  int argc = 0;
+  char *buffer, *token, *save_ptr;
+  buffer = malloc(strlen(cmdstr) + 1);
+  strlcpy(buffer, cmdstr, strlen(cmdstr) + 1);
+  for (token = strtok_r((char *)buffer, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+      argc++;
+  }
+  free(buffer);
+  return argc;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
