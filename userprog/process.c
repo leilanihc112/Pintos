@@ -26,7 +26,7 @@
 struct semaphore launched;
 struct semaphore exiting;
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (const char *file_name, const char *cmdline, void (**eip) (void), void **esp);
 
 void allocate_stack_argv(const char *cmdstr, void **esp, int argc, char **argv);
 int get_arg_count(const char *cmdstr);
@@ -80,9 +80,18 @@ start_process (void *command)
 
   int argCount = get_arg_count(command);
 
+  // printf("%s", "****************start_process**************\n");
+  // printf("%d", argCount);
+  // printf("%s", "\n");
+  // printf("%s", command);
+  // printf("%s", "\n**********************************\n");
+
   if(argCount > 1){
+    char *commandCopy = (char *)malloc(strlen(command) + 1);
+    strlcpy(commandCopy, command, strlen(command) + 1);
+
     char *token, *save_ptr;
-    token = strtok_r (command, " ", &save_ptr);
+    token = strtok_r (commandCopy, " ", &save_ptr);
     executable = token;
   } else {
     executable = command; 
@@ -93,7 +102,7 @@ start_process (void *command)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (executable, &if_.eip, &if_.esp);
+  success = load (executable, command, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (command);
@@ -246,7 +255,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *cmdstr, void (**eip) (void), void **esp)
+load (const char *file_name, const char *cmdstr, void (**eip) (void), void **esp)
 {
   log(L_TRACE, "load()");
   struct thread *t = thread_current ();
@@ -270,10 +279,10 @@ load (const char *cmdstr, void (**eip) (void), void **esp)
   // printf("%s", cmdstr);
   // printf("%s", "\n**********************************\n");
 
-  file = filesys_open (cmdstr);
+  file = filesys_open (file_name);
   if (file == NULL)
     {
-      printf ("load: %s: open failed\n", cmdstr);
+      printf ("load: %s: open failed\n", file_name);
       goto done;
     }
 
@@ -286,7 +295,7 @@ load (const char *cmdstr, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024)
     {
-      printf ("load: %s: error loading executable\n", cmdstr);
+      printf ("load: %s: error loading executable\n", file_name);
       goto done;
     }
 
@@ -499,6 +508,13 @@ setup_stack (const char *cmdstr, void **esp)
         //example args-none
         *esp = PHYS_BASE;
         int argc = get_arg_count(cmdstr);
+
+        // printf("%s", "****************ARGC**************\n");
+        // printf("%d", argc);
+        // printf("%s", "\n");
+        // printf("%s", cmdstr);
+        // printf("%s", "\n**********************************\n");
+
         char **argv = malloc((argc + 1) * sizeof(char *));
         //char **argv = malloc((argc + 1) * sizeof(char *));
         allocate_stack_argv(cmdstr, esp, argc, argv);
