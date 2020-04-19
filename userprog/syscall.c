@@ -25,28 +25,33 @@ syscall_handler (struct intr_frame *f UNUSED)
   callNo = (uint32_t)(*user_esp);
   //Hack because there might not be an arg1
   //Do a generic struct that knows how many arguments there are
+  //Need to rewatch https://utexas.zoom.us/rec/play/75cvcbz7qz43EoGV5gSDC_VxW466fa2s1yBK8_tenk6xAHEBM1Sib-dBYbOqLbHUVWriBGOh0irr3VYV
+  //https://static1.squarespace.com/static/5b18aa0955b02c1de94e4412/t/5b85fad2f950b7b16b7a2ed6/1535507195196/Pintos+Guide
 
   switch(callNo){
 
   	case SYS_HALT: //Shutdown the machine
-  		shutdown_power_off();
+  	{
+    	shutdown_power_off();
   		break;
+    }
 
-  	case SYS_WRITE: // Called to output to either a file or stdout. This is hack need to find a way to do it generically
-  		user_esp++;
-  		arg1 = (uint32_t)(*user_esp);
-  		user_esp++;
-  		arg2 = (uint32_t)(*user_esp);
-  		user_esp++;
-  		arg3 = (uint32_t)(*user_esp);
-  		f -> eax = sys_write((int)arg1, (char *)arg2, (unsigned)arg3);
-  		break;
+  	case SYS_WRITE:
+    {  // Called to output to either a file or stdout. This is hack need to find a way to do it generically
+      int fd = *((int*)f->esp + 1);
+      void* buffer = (void*)(*((int*)f->esp + 2)); 
+      unsigned size = *((unsigned*)f->esp + 3);
+    	f -> eax = sys_write(fd, buffer, size);
+    	break;
+    }
 
   	case SYS_EXIT:
+    {
   		user_esp++;
   		arg1 = (uint32_t)(*user_esp);
   		sys_exit(arg1); //arg1 has the exit status in it
   		break;
+    }
   }
 
 

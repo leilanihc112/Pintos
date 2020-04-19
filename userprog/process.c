@@ -28,9 +28,9 @@ struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *file_name, const char *cmdline, void (**eip) (void), void **esp);
 
-void allocate_stack_argv(const char *cmdstr, void **esp, int argc, char **argv);
+void allocate_stack_argv(const char *cmdstr, void **esp, int argc, uint32_t *argv);
 int get_arg_count(const char *cmdstr);
-void stack_padding(const char *argument, void **esp);
+void stack_padding(int num_pads, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -58,8 +58,22 @@ process_execute (const char *command)
   //Here its in the OS so if there are multiple processes running it would cause chaos
   sema_init(&launched, 0); //should be t->launched
   sema_init(&exiting, 0); //should be t->exiting
+
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (command, PRI_DEFAULT, start_process, cmd_copy);
+
+  //**********************************
+  //Added this in to get args-single vs args-single onearg: exit(0)
+  char *executable;
+  char *commandCopy = (char *)malloc(strlen(command) + 1);
+  strlcpy(commandCopy, command, strlen(command) + 1);
+
+  char *token, *save_ptr;
+  token = strtok_r (commandCopy, " ", &save_ptr);
+  executable = token;
+  //***********************************
+
+  tid = thread_create (executable, PRI_DEFAULT, start_process, cmd_copy);
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
@@ -492,7 +506,7 @@ setup_stack (const char *cmdstr, void **esp)
   bool success = false;
 
   char *espchar, *argv0ptr;
-   uint32_t *espword;
+  uint32_t *espword;
 
 
   log(L_TRACE, "setup_stack()");
@@ -515,40 +529,32 @@ setup_stack (const char *cmdstr, void **esp)
         // printf("%s", cmdstr);
         // printf("%s", "\n**********************************\n");
 
-        char **argv = malloc((argc + 1) * sizeof(char *));
+        uint32_t *argv[argc];
         //char **argv = malloc((argc + 1) * sizeof(char *));
         allocate_stack_argv(cmdstr, esp, argc, argv);
 
-        espchar = (char *)(*esp); // This is where argv0ptr is
-        argv0ptr = argv[0]; // argv[0]
+      //pushing argv[i]'s onto stack in reverse order
+         int i = argc-1; 
+         for(i; i >= 0; i--){ 
+          // printf("%s", "\n********************\n");
+          // printf("%s", argv[i]);
+          // printf("%s", "\n********************\n");
+          *esp -= 4;
+          *((void**) *esp) = argv[i];
+         }
 
-        // espchar--;
-        // *espchar = 0; //NOTE: This is a hack just for args none, we're padding twice here 
-        // espchar--;
-        // *espchar = 0; // Refer to stack diagram again to understand
-        // *esp -= 6; //Padding + Null Pointer
+        //Push argv
+        *esp -= 4;
+        char* argvPointer = (*esp + 4);
+        *((void**) *esp) = argvPointer;
 
-        *esp-=4; //Move back to the argv[1] location
-        espword = (uint32_t *)(*esp);
+        //Push argc
+        *esp -= 4;
+        *((int*) *esp) = argc;
 
-        if(argc < 2){
-          *espword = 0; // If argc == 1 set argv[1] to NULL or 0
-        } else {
-          *espword = argv[1]; // Else set equal to argv[1]
-        }
-
-        espword--;
-        *espword = argv0ptr;
-
-        char *argvptr = espword; //argv
-        *esp -= 8; 
-        espword = (uint32_t *)(*esp);
-        *espword = argvptr; //argv points to argv[0]
-        espword--;
-        *espword = argc; // this is argc
-        espword--;
-        *espword = 0; //return address
-        *esp = espword;
+        //Push return value
+        *esp -= 4;
+        *((int*) *esp) = 0;
 
 	  }
       else {
@@ -559,31 +565,53 @@ setup_stack (const char *cmdstr, void **esp)
   return success;
 }
 
-void allocate_stack_argv(const char *cmdstr, void **esp, int argc, char **argv){
-   char *argument, *save_ptr;
+void allocate_stack_argv(const char *cmdstr, void **esp, int argc, uint32_t *argv){
+
+  char *commandCopy = (char *)malloc(strlen(cmdstr) + 1);
+  strlcpy(commandCopy, cmdstr, strlen(cmdstr) + 1);
+
+  char *argument, *save_ptr;
+  int sum = 0; 
 
    int i = 0;
-   for (argument = strtok_r((char *)cmdstr, " ", &save_ptr); argument != NULL; argument = strtok_r(NULL, " ", &save_ptr)) {
+   for (argument = strtok_r((char *)commandCopy, " ", &save_ptr); argument != NULL; argument = strtok_r(NULL, " ", &save_ptr)) {
     int len = strlen(argument) + 1;
+    sum += len;
     *esp -= len;
-    argv[i] = *esp;
-    stack_padding(argument, *esp);
-    i++;
     strlcpy(*esp, argument, len);
+    argv[i] = *esp;
+    //stack_padding(argument, *esp);
+    //free(len);
+    i++;
   } //
-
-  argv[argc] = 0;
+  // printf("%s", "\n********************\n");
+  // printf("%s", cmdstr);
+  // printf("%s", "\n********************\n");
+  // printf("%s", "\n********************\n");
+  // printf("%d", sum);
+  // printf("%s", "\n********************\n");
+  stack_padding(sum, esp);
+  *esp -= 4; 
+  //argv[argc] = *esp;
+  *((uint32_t*) *esp) = 0; // set last to NULL aka argv[argc]
 }
 
 
-void stack_padding(const char *argument, void **esp){
-  int num_pads = (int) (strlen(argument) + 1) % 4;
-
+void stack_padding(int num_pads, void **esp){
+  // int num_pads = (int) (strlen(argument) + 1) % 4;
+  // printf("%s", "\n********************\n");
+  // printf("%d", num_pads);
+  // printf("%s", "\n********************\n");
+  int padding = 4 - (num_pads % 4);
+  // printf("%s", "\n********************\n");
+  // printf("%d", padding);
+  // printf("%s", "\n********************\n");
   int i = 0;
-  for(i; i < num_pads; i++){
+  for(i; i < padding; i++){
     *esp--;
-    *esp = 0;
+    esp = 0;
   }
+
 }
 
 int get_arg_count(const char *cmdstr){
