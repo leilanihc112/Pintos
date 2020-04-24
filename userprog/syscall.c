@@ -9,6 +9,8 @@ static void syscall_handler (struct intr_frame *);
 int sys_write(int fd, void *buffer, unsigned size);
 void sys_exit (int status);
 
+tid_t sys_exec(const char *cmd_line);
+
 void
 syscall_init (void)
 {
@@ -119,10 +121,35 @@ each system call's arguments from the stack.*/
   		sys_exit(arg1); //arg1 has the exit status in it
   		break;
     }
+
+    case SYS_EXEC:
+    {
+      //Still need to finish implementation of this
+      //Looks like it prints stuff out write 
+      //but never terminates
+      f -> eax = sys_exec((char*)(*((int*)f->esp + 1)));
+      break;
+    }
+
+
   }
 
 
   //thread_exit ();
+}
+
+
+
+/*System Call: pid_t exec (const char *cmd_line)
+Runs the executable whose name is given in cmd_line, passing any given arguments, 
+and returns the new process's program id (pid). Must return pid -1, which otherwise 
+should not be a valid pid, if the program cannot load or run for any reason. Thus, 
+the parent process cannot return from the exec until it knows whether the child process 
+successfully loaded its executable. You must use appropriate synchronization to ensure this.*/
+
+tid_t sys_exec(const char *cmd_line){
+  return process_execute (cmd_line);
+
 }
 
 int sys_write(int fd, void *buffer, unsigned size){
