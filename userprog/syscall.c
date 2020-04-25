@@ -122,10 +122,15 @@ each system call's arguments from the stack.*/
 
   	case SYS_WRITE:
     {  // Called to output to either a file or stdout. This is hack need to find a way to do it generically
+      check_address(*(user_esp+1));
+      check_address(*(user_esp+2));
+      check_address(*(user_esp+3));
       int fd = *((int*)f->esp + 1);
       void* buffer = (void*)(*((int*)f->esp + 2)); 
       unsigned size = *((unsigned*)f->esp + 3);
+      lock_acquire_wrapper();
     	f -> eax = sys_write(fd, buffer, size);
+      lock_release_wrapper();
     	break;
     }
 
@@ -134,7 +139,7 @@ each system call's arguments from the stack.*/
   		//user_esp++;
   		//arg1 = (uint32_t)(*user_esp);
   		//sys_exit(arg1); //arg1 has the exit status in it
-                check_address(user_esp+1);
+                check_address(*(user_esp+1));
                 sys_exit(*(user_esp+1));
   		break;
     }
@@ -153,8 +158,8 @@ each system call's arguments from the stack.*/
 
     case SYS_CREATE:
     {
-      check_address(*(user_esp+4));
-      f -> eax = sys_create((char*)(*((int*)user_esp + 4)), *((unsigned*)user_esp + 5));
+      check_address(*(user_esp+1));
+      f -> eax = sys_create((char*)(*((int*)user_esp + 1)), *((unsigned*)user_esp + 2));
       break;
     }
 
@@ -180,6 +185,15 @@ each system call's arguments from the stack.*/
 
     case SYS_READ:
     {
+      check_address(*(user_esp+1));
+      check_address(*(user_esp+2));
+      check_address(*(user_esp+3));
+      int fd = *((int*)f->esp + 1);
+      void* buffer = (void*)(*((int*)f->esp + 2)); 
+      unsigned size = *((unsigned*)f->esp + 3);
+      lock_acquire_wrapper();
+    	f -> eax = sys_read(fd, buffer, size);
+      lock_release_wrapper();
       break;
     }
 
@@ -272,15 +286,20 @@ Returns true if successful, false otherwise. Creating a new file does
 not open it: opening the new file is a separate operation which would 
 require a open system call.*/
 
-bool sys_create(const char *file, unsigned intial_size){
+bool sys_create(const char *file, unsigned initial_size){
   /* Creates a file named NAME with the given INITIAL_SIZE.
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 
    // bool filesys_create (const char *name, off_t initial_size)
+   if (!file)
+   {
+      sys_exit(-1);
+      return 0;
+   }
 
-  return filesys_create(file, intial_size);
+  return filesys_create(file, initial_size);
 }
 
 /*System Call: int filesize (int fd)
@@ -307,7 +326,31 @@ the file could not be read (due to a condition other than end of file).
 Fd 0 reads from the keyboard using input_getc().*/
 
 int sys_read(int fd, void *buffer, unsigned size){
-
+   if (fd == 0){ // means stdin
+		for(unsigned i =0; i != size; i++)
+                   *(uint8_t *)(buffer+i) = input_getc();
+		return (int)size;
+	} 
+        else
+        {
+              struct list_elem *e;
+              struct fd_entry *fe = NULL;
+              struct list *fd_list = &thread_current()->files;
+  
+              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+              {
+                  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+                   if(e1->fd == fd)
+                   {
+                       fe = e1;
+                       break;
+                   }
+              }
+              if (fe != NULL)
+                  return (int)file_read(fe->file,buffer, size);
+              else
+                  return -1;
+        }// for else need to figure out more stuff about file descriptors
 }
 
 
@@ -412,11 +455,19 @@ and nonzero values indicate errors.*/
 
 void sys_exit (int status){
 	struct thread *currentThread = thread_current();
+        struct list_elem *l;
+        
+        while (!list_empty(&currentThread->files))
+        {
+             l = list_begin(&currentThread->files);
+             sys_close(list_entry(l, struct fd_entry, elem)->fd);
+        }
 
 	currentThread -> exit_status = status;
 	printf ("%s: exit(%d)\n", currentThread -> name, status);
 	// pass this status to a waiting parent
 	thread_exit(); //cleanup and de-allocation and waiting for parent to reap exit status
+        return -1;
 }
 
 /*System Call: void seek (int fd, unsigned position)
@@ -471,12 +522,12 @@ void* check_address(const void *vaddr)
 	sys_exit(-1);
         return 0;
     }
-    void *p = pagedir_get_page(thread_current()->pagedir, vaddr);
-    if(!p)
-    {
-        sys_exit(-1);
-        return 0;
-    }
+    //void *p = pagedir_get_page(thread_current()->pagedir, vaddr);
+    //if(!p)
+    //{
+    //    sys_exit(-1);
+    //    return 0;
+   // }
 
-    return p;
+    return vaddr;
 }
