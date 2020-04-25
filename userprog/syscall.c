@@ -15,6 +15,15 @@ bool sys_create(const char *file, unsigned intial_size);
 bool sys_remove(const char *file);
 int sys_open(const char *file);
 
+void* check_address(const void *vaddr);
+
+struct fd_entry
+{
+   int fd;
+   struct file *file;
+   struct list_elem elem;
+};
+
 void
 syscall_init (void)
 {
@@ -27,7 +36,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   //printf ("system call!\n");
   uint32_t callNo;
   uint32_t *user_esp = f -> esp;
-  uint32_t arg1, arg2, arg3;
+  //uint32_t arg1, arg2, arg3;
 
 
   //Might need more checks here to see if user_esp is valid 
@@ -43,7 +52,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   //check if address is in a page
 
   //Need to find a better way of doing this, its pretty hacky and was just trying something out
-  if(!is_user_vaddr(user_esp) || 
+/*  if(!is_user_vaddr(user_esp) || 
      !is_user_vaddr(user_esp + 1) || 
      !is_user_vaddr(user_esp + 2) || 
      !is_user_vaddr(user_esp + 3) || 
@@ -52,7 +61,9 @@ syscall_handler (struct intr_frame *f UNUSED)
      pagedir_get_page(thread_current()->pagedir,user_esp + 2)==NULL || 
      pagedir_get_page(thread_current()->pagedir,user_esp + 3)==NULL){
     sys_exit(-1);
-  }
+  } */
+
+  check_address(user_esp);
 
   callNo = (uint32_t)(*user_esp);
   //Hack because there might not be an arg1
@@ -120,9 +131,11 @@ each system call's arguments from the stack.*/
 
   	case SYS_EXIT:
     {
-  		user_esp++;
-  		arg1 = (uint32_t)(*user_esp);
-  		sys_exit(arg1); //arg1 has the exit status in it
+  		//user_esp++;
+  		//arg1 = (uint32_t)(*user_esp);
+  		//sys_exit(arg1); //arg1 has the exit status in it
+                check_address(user_esp+1);
+                sys_exit(*(user_esp+1));
   		break;
     }
 
@@ -341,9 +354,29 @@ write all of buffer in one call to putbuf(), at least as long as size is
 
 int sys_write(int fd, void *buffer, unsigned size){
 	if (fd == 1){ // means stdout
-		putbuf(buffer, size);
-		return(size);
-	} // for else need to figure out more stuff about file descriptors
+		putbuf((char *)buffer, (size_t)size);
+		return (int)size;
+	} 
+        else
+        {
+              struct list_elem *e;
+              struct fd_entry *fe = NULL;
+              struct list *fd_list = &thread_current()->files;
+  
+              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+              {
+                  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+                   if(e1->fd == fd)
+                   {
+                       fe = e1;
+                       break;
+                   }
+              }
+              if (fe != NULL)
+                  return (int)file_write(fe->file,buffer, size);
+              else
+                  return -1;
+        }// for else need to figure out more stuff about file descriptors
 }
 
 
@@ -391,4 +424,22 @@ all its open file descriptors, as if by calling this function for each one.*/
 
 void sys_close(int fd){
 
+}
+
+
+void* check_address(const void *vaddr)
+{
+    if(!is_user_vaddr(vaddr))
+    {
+	sys_exit(-1);
+        return 0;
+    }
+    void *p = pagedir_get_page(thread_current()->pagedir, vaddr);
+    if(!p)
+    {
+        sys_exit(-1);
+        return 0;
+    }
+
+    return p;
 }

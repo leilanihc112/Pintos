@@ -18,19 +18,29 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+//#include "userprog/syscall.h"
 
 #define LOGGING_LEVEL 6
 
 #include <log.h>
 
-struct semaphore launched;
-struct semaphore exiting;
+//struct semaphore launched;
+//struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *file_name, const char *cmdline, void (**eip) (void), void **esp);
 
 void allocate_stack_argv(const char *cmdstr, void **esp, int argc, uint32_t *argv);
 int get_arg_count(const char *cmdstr);
 void stack_padding(int num_pads, void **esp);
+
+struct fd_entry
+{
+   int fd;
+   struct file *file;
+   struct list_elem elem;
+};
+
+void files_close_all(struct list* files);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -56,8 +66,8 @@ process_execute (const char *command)
   strlcpy (cmd_copy, command, PGSIZE);
   //This semaphore should really be in the thread control block (thread structure)
   //Here its in the OS so if there are multiple processes running it would cause chaos
-  sema_init(&launched, 0); //should be t->launched
-  sema_init(&exiting, 0); //should be t->exiting
+//  sema_init(&launched, 0); //should be t->launched
+//  sema_init(&exiting, 0); //should be t->exiting
 
 
   /* Create a new thread to execute FILE_NAME. */
@@ -77,7 +87,7 @@ process_execute (const char *command)
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
-  sema_down(&launched);
+  sema_down(&thread_current()->sem);
   return tid;
 }
 
@@ -121,9 +131,14 @@ start_process (void *command)
   /* If load failed, quit. */
   palloc_free_page (command);
   if (!success)
+  {
+    sema_up(&thread_current()->parent->sem);
     thread_exit ();
-
-  sema_up(&launched);
+  }
+  else
+  {
+      sema_up(&thread_current()->parent->sem);
+  }
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -147,7 +162,7 @@ int
 process_wait (tid_t child_tid UNUSED)
 {
   // Need to wait for the child to exit and then reap the childs exit status
-  sema_down(&exiting);
+  sema_down(&thread_current()->sem);
   //here means child has exited
   //need to get childs exit status from its thread and then return that
   //return -1;
@@ -159,6 +174,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  lock_acquire_wrapper();
+  files_close_all(&thread_current()->files);
+  lock_release_wrapper();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -176,7 +195,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-    sema_up(&exiting);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -194,7 +212,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -386,7 +404,7 @@ load (const char *file_name, const char *cmdstr, void (**eip) (void), void **esp
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
@@ -654,4 +672,19 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+void files_close_all(struct list* files)
+{
+	struct list_elem *e;
+
+	while(!list_empty(files))
+	{
+		e = list_pop_front(files);
+
+		struct fd_entry *f = list_entry(e, struct fd_entry, elem);
+	      	file_close(f->file);
+	      	list_remove(e);
+	      	free(f);
+	}     
 }

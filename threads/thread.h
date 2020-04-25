@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <kernel/list.h>
+#include <threads/synch.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -98,6 +100,9 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     int32_t exit_status;
 #endif
+    struct list files;
+    struct semaphore sem;
+    struct thread* parent;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
