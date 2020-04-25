@@ -145,24 +145,29 @@ each system call's arguments from the stack.*/
       //Looks like it prints stuff out write 
       //but never terminates
       //probably needs wait to be implemented
-      f -> eax = sys_exec((char*)(*((int*)f->esp + 1)));
+      hex_dump(*(user_esp+1), *(user_esp+1),64,true);
+      check_address(*(user_esp+1));
+      f -> eax = sys_exec((char*)(*((int*)user_esp + 1)));
       break;
     }
 
     case SYS_CREATE:
     {
-      f -> eax = sys_create((char*)(*((int*)f->esp + 1)), *((unsigned*)f->esp + 2));
+      check_address(*(user_esp+4));
+      f -> eax = sys_create((char*)(*((int*)user_esp + 4)), *((unsigned*)user_esp + 5));
       break;
     }
 
     case SYS_REMOVE: 
     {
-      //f -> eax = sys_remove((char*)(*((int*)f->esp + 1)));
+      check_address(*(user_esp+1));
+      f -> eax = sys_remove((char*)(*((int*)user_esp + 1)));
       break;
     }
 
     case SYS_OPEN: 
     {
+      check_address(*(user_esp+1));
       //f -> eax = sys_open((char*)(*((int*)f->esp + 1)));
       break;
     }
@@ -180,6 +185,7 @@ each system call's arguments from the stack.*/
 
     case SYS_FILESIZE:
     {
+      f->eax = sys_filesize(*(user_esp+1));
       break;
     }
 
@@ -195,8 +201,12 @@ each system call's arguments from the stack.*/
 
     case SYS_CLOSE:
     {
+      sys_close(*(user_esp+1));
       break;
     }
+    default:
+       printf("No match\n");
+       printf("%d\n",*user_esp);
 
 
   }
@@ -247,8 +257,12 @@ bool sys_remove(const char *file){
    or if an internal memory allocation fails. */
   
   //bool filesys_remove (const char *name)
+  if (filesys_remove(file) == NULL)
+      return false;
+  else
+      return true;
 
-  return filesys_remove(file);
+ // return filesys_remove(file);
 }
 
 
@@ -273,7 +287,17 @@ bool sys_create(const char *file, unsigned intial_size){
 Returns the size, in bytes, of the file open as fd.*/
 
 int sys_filesize(int fd){
+   struct list_elem *e;
+   struct fd_entry *fe = NULL;
 
+   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
+   {
+      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
+      if(tmp->fd == fd)
+         fe = tmp;
+         break;
+   }
+    return file_length(fe->file);
 }
 
 /*System Call: int read (int fd, void *buffer, unsigned size)
@@ -423,7 +447,20 @@ Closes file descriptor fd. Exiting or terminating a process implicitly closes
 all its open file descriptors, as if by calling this function for each one.*/
 
 void sys_close(int fd){
+        struct list_elem *e;
+	struct fd_entry *fe = NULL;
+	struct list *fd_list = &thread_current()->files;
 
+	for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+	{
+	  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+	   if(e1->fd == fd)
+	   {
+	       file_close(e1->file);
+               list_remove(e);
+	       break;
+	   }
+	}
 }
 
 

@@ -24,8 +24,8 @@
 
 #include <log.h>
 
-//struct semaphore launched;
-//struct semaphore exiting;
+struct semaphore launched;
+struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *file_name, const char *cmdline, void (**eip) (void), void **esp);
 
@@ -66,8 +66,8 @@ process_execute (const char *command)
   strlcpy (cmd_copy, command, PGSIZE);
   //This semaphore should really be in the thread control block (thread structure)
   //Here its in the OS so if there are multiple processes running it would cause chaos
-//  sema_init(&launched, 0); //should be t->launched
-//  sema_init(&exiting, 0); //should be t->exiting
+  sema_init(&launched, 0); //should be t->launched
+  sema_init(&exiting, 0); //should be t->exiting
 
 
   /* Create a new thread to execute FILE_NAME. */
@@ -87,7 +87,9 @@ process_execute (const char *command)
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
-  sema_down(&thread_current()->sem);
+sema_down(&launched);
+
+//  sema_down(&thread_current()->sem);
   return tid;
 }
 
@@ -132,13 +134,15 @@ start_process (void *command)
   palloc_free_page (command);
   if (!success)
   {
-    sema_up(&thread_current()->parent->sem);
+ //   sema_up(&thread_current()->parent->sem);
     thread_exit ();
   }
   else
   {
-      sema_up(&thread_current()->parent->sem);
+//      sema_up(&thread_current()->parent->sem);
   }
+
+sema_up(&launched);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -162,7 +166,8 @@ int
 process_wait (tid_t child_tid UNUSED)
 {
   // Need to wait for the child to exit and then reap the childs exit status
-  sema_down(&thread_current()->sem);
+sema_down(&exiting);
+//  sema_down(&thread_current()->sem);
   //here means child has exited
   //need to get childs exit status from its thread and then return that
   //return -1;
@@ -195,6 +200,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+sema_up(&exiting);
 }
 
 /* Sets up the CPU for running user code in the current
