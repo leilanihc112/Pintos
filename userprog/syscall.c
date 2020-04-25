@@ -7,13 +7,19 @@
 #include "filesys/filesys.h"
 
 static void syscall_handler (struct intr_frame *);
+
 int sys_write(int fd, void *buffer, unsigned size);
 void sys_exit (int status);
-
 tid_t sys_exec(const char *cmd_line);
 bool sys_create(const char *file, unsigned intial_size);
 bool sys_remove(const char *file);
 int sys_open(const char *file);
+unsigned sys_tell(int fd);
+void sys_close(int fd);
+void sys_seek(int fd, unsigned position);
+int sys_filesize(int fd);
+int sys_read(int fd, void *buffer, unsigned size);
+int sys_wait (tid_t pid);
 
 void* check_address(const void *vaddr);
 
@@ -125,9 +131,9 @@ each system call's arguments from the stack.*/
       check_address(*(user_esp+1));
       check_address(*(user_esp+2));
       check_address(*(user_esp+3));
-      int fd = *((int*)f->esp + 1);
-      void* buffer = (void*)(*((int*)f->esp + 2)); 
-      unsigned size = *((unsigned*)f->esp + 3);
+      int fd = (int)(*(user_esp + 1));
+      void* buffer = (void*)(*(user_esp + 2)); 
+      unsigned size = (unsigned)(*(user_esp + 3));
       lock_acquire_wrapper();
     	f -> eax = sys_write(fd, buffer, size);
       lock_release_wrapper();
@@ -140,7 +146,7 @@ each system call's arguments from the stack.*/
   		//arg1 = (uint32_t)(*user_esp);
   		//sys_exit(arg1); //arg1 has the exit status in it
                 check_address(*(user_esp+1));
-                sys_exit(*(user_esp+1));
+                sys_exit((int)(*(user_esp+1)));
   		break;
     }
 
@@ -150,36 +156,39 @@ each system call's arguments from the stack.*/
       //Looks like it prints stuff out write 
       //but never terminates
       //probably needs wait to be implemented
-      hex_dump(*(user_esp+1), *(user_esp+1),64,true);
+      //hex_dump(*(user_esp+1), *(user_esp+1),64,true);
       check_address(*(user_esp+1));
-      f -> eax = sys_exec((char*)(*((int*)user_esp + 1)));
+      lock_acquire_wrapper();
+      f -> eax = sys_exec((char *)(*(user_esp + 1)));
+      lock_release_wrapper();
       break;
     }
 
     case SYS_CREATE:
     {
       check_address(*(user_esp+1));
-      f -> eax = sys_create((char*)(*((int*)user_esp + 1)), *((unsigned*)user_esp + 2));
+      f -> eax = sys_create((char *)(*(user_esp + 1)), (unsigned)(*(user_esp + 2)));
       break;
     }
 
     case SYS_REMOVE: 
     {
       check_address(*(user_esp+1));
-      f -> eax = sys_remove((char*)(*((int*)user_esp + 1)));
+      f -> eax = sys_remove((char *)(*(user_esp + 1)));
       break;
     }
 
     case SYS_OPEN: 
     {
       check_address(*(user_esp+1));
-      //f -> eax = sys_open((char*)(*((int*)f->esp + 1)));
+      f -> eax = sys_open((char *)(*(user_esp + 1)));
       break;
     }
 
     case SYS_WAIT: 
     {
-      //f -> eax = sys_open((char*)(*((int*)f->esp + 1)));
+      check_address(*(user_esp+1));
+      f -> eax = sys_wait((tid_t)(*(user_esp + 1)));
       break;
     }
 
@@ -188,9 +197,9 @@ each system call's arguments from the stack.*/
       check_address(*(user_esp+1));
       check_address(*(user_esp+2));
       check_address(*(user_esp+3));
-      int fd = *((int*)f->esp + 1);
-      void* buffer = (void*)(*((int*)f->esp + 2)); 
-      unsigned size = *((unsigned*)f->esp + 3);
+      int fd = (int)(*(user_esp + 1));
+      void* buffer = (void*)(*(user_esp + 2)); 
+      unsigned size = (unsigned)(*(user_esp + 3));
       lock_acquire_wrapper();
     	f -> eax = sys_read(fd, buffer, size);
       lock_release_wrapper();
@@ -199,23 +208,30 @@ each system call's arguments from the stack.*/
 
     case SYS_FILESIZE:
     {
-      f->eax = sys_filesize(*(user_esp+1));
+      check_address(*(user_esp+1));
+      f->eax = sys_filesize((int)(*(user_esp+1)));
       break;
     }
 
     case SYS_SEEK:
     {
+      check_address(*(user_esp+1));
+      check_address(*(user_esp+2));
+      sys_seek((int)(*(user_esp+1)), (unsigned)(*(user_esp+2)));
       break;
     }
 
     case SYS_TELL:
     {
+      check_address(*(user_esp+1));
+      f->eax = sys_tell((int)(*(user_esp+1)));
       break;
     }
 
     case SYS_CLOSE:
     {
-      sys_close(*(user_esp+1));
+      check_address(*(user_esp+1));
+      sys_close((int)(*(user_esp+1)));
       break;
     }
     default:
@@ -254,8 +270,14 @@ int sys_open(const char *file){
    or if an internal memory allocation fails. */
 
   //struct file *filesys_open (const char *name)
+  struct file *f;
 
-  return filesys_open(file);
+  f = filesys_open(file);
+
+  if (!f)
+     return -1;
+  
+  return f;
 }
 
 /*System Call: bool remove (const char *file)
@@ -363,7 +385,6 @@ successfully loaded its executable. You must use appropriate synchronization to 
 
 tid_t sys_exec(const char *cmd_line){
   return process_execute (cmd_line);
-
 }
 
 /*System Call: int wait (pid_t pid)
@@ -401,7 +422,7 @@ to the comment at the top of the function and then implement the wait system cal
 Implementing this system call requires considerably more work than any of the rest.*/
 
 int sys_wait (tid_t pid){
-
+    return process_wait(pid);
 }
 
 /*System Call: int write (int fd, const void *buffer, unsigned size)
@@ -480,7 +501,17 @@ indicating end of file. A later write extends the file, filling any unwritten ga
  require any special effort in system call implementation.*/
 
 void sys_seek(int fd, unsigned position){
+   struct list_elem *e;
+   struct fd_entry *fe = NULL;
 
+   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
+   {
+      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
+      if(tmp->fd == fd)
+         fe = tmp;
+         break;
+   }
+    file_seek(fe->file, position);
 }
 
 
@@ -489,7 +520,17 @@ Returns the position of the next byte to be read or written in open file fd, exp
 in bytes from the beginning of the file.*/
 
 unsigned sys_tell(int fd){
+     struct list_elem *e;
+   struct fd_entry *fe = NULL;
 
+   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
+   {
+      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
+      if(tmp->fd == fd)
+         fe = tmp;
+         break;
+   }
+    return file_tell(fe->file);
 }
 
 
