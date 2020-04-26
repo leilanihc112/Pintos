@@ -95,7 +95,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  //lock_init(&filesys_lock);
+  lock_init(&filesys_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -106,7 +106,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
-/*void lock_acquire_wrapper()
+void lock_acquire_wrapper()
 {
     lock_acquire(&filesys_lock);
 }
@@ -114,7 +114,7 @@ thread_init (void)
 void lock_release_wrapper()
 {
     lock_release(&filesys_lock);
-}*/
+}
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
