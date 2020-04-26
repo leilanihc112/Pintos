@@ -16,7 +16,7 @@ bool sys_remove(const char *file);
 int sys_open(const char *file);
 unsigned sys_tell(int fd);
 void sys_close(int fd);
-void sys_seek(int fd, unsigned position);
+static int sys_seek(int fd, unsigned position);
 int sys_filesize(int fd);
 int sys_read(int fd, void *buffer, unsigned size);
 int sys_wait (tid_t pid);
@@ -129,131 +129,114 @@ Each system call argument, whether an integer or a pointer, takes up 4 bytes on 
 should be able to take advantage of this to avoid writing much near-identical code for retrieving 
 each system call's arguments from the stack.*/
 
-  switch(callNo){
+  switch(callNo)
+  {
 
   	case SYS_HALT: //Shutdown the machine
   	{
-    	shutdown_power_off();
+    		shutdown_power_off();
   		break;
-    }
-
+    	}
   	case SYS_WRITE:
-    {  // Called to output to either a file or stdout. This is hack need to find a way to do it generically
-      check_address(*(user_esp+1));
-      check_address(*(user_esp+2));
-      check_address(*(user_esp+3));
-      int fd = (int)(*(user_esp + 1));
-      void* buffer = (void*)(*(user_esp + 2)); 
-      unsigned size = (unsigned)(*(user_esp + 3));
-      lock_acquire_wrapper();
-    	f -> eax = sys_write(fd, buffer, size);
-      lock_release_wrapper();
-    	break;
-    }
-
+    	{  // Called to output to either a file or stdout. This is hack need to find a way to do it generically
+	       check_address(*(user_esp+1));
+	       check_address(*(user_esp+2));
+	       check_address(*(user_esp+3));
+	       int fd = (int)(*(user_esp + 1));
+	       void* buffer = (void*)(*(user_esp + 2)); 
+	       unsigned size = (unsigned)(*(user_esp + 3));
+	       lock_acquire_wrapper();
+	       f -> eax = sys_write(fd, buffer, size);
+	       lock_release_wrapper();
+	    	break;
+    	}
   	case SYS_EXIT:
-    {
+    	{
   		//user_esp++;
   		//arg1 = (uint32_t)(*user_esp);
   		//sys_exit(arg1); //arg1 has the exit status in it
                 check_address(*(user_esp+1));
                 sys_exit((int)(*(user_esp+1)));
   		break;
-    }
+    	}
+    	case SYS_EXEC:
+    	{
+      		check_address(*(user_esp+1));
+      		lock_acquire_wrapper();
+      		f -> eax = sys_exec((char *)(*(user_esp + 1)));
+      		lock_release_wrapper();
+      		break;
+    	}
+    	case SYS_CREATE:
+    	{
+      		check_address(*(user_esp+1));
+      		f -> eax = sys_create((char *)(*(user_esp + 1)), (unsigned)(*(user_esp + 2)));
+      		break;
+    	}
+    	case SYS_REMOVE: 
+    	{
+      		check_address(*(user_esp+1));
+      		f -> eax = sys_remove((char *)(*(user_esp + 1)));
+      		break;
+    	}
+    	case SYS_OPEN: 
+    	{
+      		check_address(*(user_esp+1));
+      		f -> eax = sys_open((char *)(*(user_esp + 1)));
+      		break;
+    	}
+    	case SYS_WAIT: 
+    	{
+      		check_address(*(user_esp+1));
+      		f -> eax = sys_wait((tid_t)(*(user_esp + 1)));
+      		break;
+    	}
+    	case SYS_READ:
+    	{
+	      check_address(*(user_esp+1));
+	      check_address(*(user_esp+2));
+	      check_address(*(user_esp+3));
+	      int fd = (int)(*(user_esp + 1));
+	      void* buffer = (void*)(*(user_esp + 2)); 
+	      unsigned size = (unsigned)(*(user_esp + 3));
+	      lock_acquire_wrapper();
+	      f -> eax = sys_read(fd, buffer, size);
+	      lock_release_wrapper();
+	      break;
+    	}
+    	case SYS_FILESIZE:
+    	{
+      		check_address(*(user_esp+1));
+      		f->eax = sys_filesize((int)(*(user_esp+1)));
+      		break;
+    	}
+    	case SYS_SEEK:
+    	{
+      		check_address(*(user_esp+1));
+      		check_address(*(user_esp+2));
+      		sys_seek((int)(*(user_esp+1)), (unsigned)(*(user_esp+2)));
+      		break;
+    	}
 
-    case SYS_EXEC:
-    {
-      //Still need to finish implementation of this
-      //Looks like it prints stuff out write 
-      //but never terminates
-      //probably needs wait to be implemented
-      //hex_dump(*(user_esp+1), *(user_esp+1),64,true);
-      check_address(*(user_esp+1));
-      lock_acquire_wrapper();
-      f -> eax = sys_exec((char *)(*(user_esp + 1)));
-      lock_release_wrapper();
-      break;
-    }
-
-    case SYS_CREATE:
-    {
-      check_address(*(user_esp+1));
-      f -> eax = sys_create((char *)(*(user_esp + 1)), (unsigned)(*(user_esp + 2)));
-      break;
-    }
-
-    case SYS_REMOVE: 
-    {
-      check_address(*(user_esp+1));
-      f -> eax = sys_remove((char *)(*(user_esp + 1)));
-      break;
-    }
-
-    case SYS_OPEN: 
-    {
-      check_address(*(user_esp+1));
-      f -> eax = sys_open((char *)(*(user_esp + 1)));
-      break;
-    }
-
-    case SYS_WAIT: 
-    {
-      check_address(*(user_esp+1));
-      f -> eax = sys_wait((tid_t)(*(user_esp + 1)));
-      break;
-    }
-
-    case SYS_READ:
-    {
-      check_address(*(user_esp+1));
-      check_address(*(user_esp+2));
-      check_address(*(user_esp+3));
-      int fd = (int)(*(user_esp + 1));
-      void* buffer = (void*)(*(user_esp + 2)); 
-      unsigned size = (unsigned)(*(user_esp + 3));
-      lock_acquire_wrapper();
-    	f -> eax = sys_read(fd, buffer, size);
-      lock_release_wrapper();
-      break;
-    }
-
-    case SYS_FILESIZE:
-    {
-      check_address(*(user_esp+1));
-      f->eax = sys_filesize((int)(*(user_esp+1)));
-      break;
-    }
-
-    case SYS_SEEK:
-    {
-      check_address(*(user_esp+1));
-      check_address(*(user_esp+2));
-      sys_seek((int)(*(user_esp+1)), (unsigned)(*(user_esp+2)));
-      break;
-    }
-
-    case SYS_TELL:
-    {
-      check_address(*(user_esp+1));
-      f->eax = sys_tell((int)(*(user_esp+1)));
-      break;
-    }
-
-    case SYS_CLOSE:
-    {
-      check_address(*(user_esp+1));
-      sys_close((int)(*(user_esp+1)));
-      break;
-    }
-    default:
-       printf("No match\n");
-       printf("%d\n",*user_esp);
+    	case SYS_TELL:
+    	{
+      		check_address(*(user_esp+1));
+      		f->eax = sys_tell((int)(*(user_esp+1)));
+      		break;
+    	}
+    	case SYS_CLOSE:
+    	{
+      		check_address(*(user_esp+1));
+      		sys_close((int)(*(user_esp+1)));
+      		break;
+    	}
+    	default:
+       		printf("No match\n");
+       		printf("%d\n",*user_esp);
 
 
-  }
+   }
 
-
-  //thread_exit ();
 }
 
 
@@ -273,39 +256,39 @@ different processes, each open returns a new file descriptor. Different file
 descriptors for a single file are closed independently in separate calls to close 
 and they do not share a file position.*/
 
-int sys_open(const char *file){
+int sys_open(const char *file)
+{
   /* Opens the file with the given NAME.
    Returns the new file if successful or a null pointer
    otherwise.
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 
-  //struct file *filesys_open (const char *name)
-  struct file *f;
-  struct fd_entry *fe;
- 
-  if (!file)
-     return -1;
-  if (!is_user_vaddr(file))
-    sys_exit(-1);
+	  struct file *f;
+	  struct fd_entry *fe;
+	 
+	  if (!file)
+	     	return -1;
+	  if (!is_user_vaddr(file))
+	    	sys_exit(-1);
 
-  f = filesys_open(file);
+	  f = filesys_open(file);
 
-  if (!f)
-     return -1;
+	  if (!f)
+	     	return -1;
 
-  fe = (struct fd_entry *)malloc(sizeof(struct fd_entry));
-  if (!fe)
-  {
-      file_close(f);
-  }
+	  fe = (struct fd_entry *)malloc(sizeof(struct fd_entry));
+	  if (!fe)
+	  {
+	      	file_close(f);
+	  }
 
-  fe->file = f;
-  fe->fd = alloc_fid();
-  list_push_back(&f_list, &fe->elem);
-  list_push_back(&thread_current()->files, &fe->t_elem);
-  
-  return fe->fd;
+	  fe->file = f;
+	  fe->fd = alloc_fid();
+	  list_push_back(&f_list, &fe->elem);
+	  list_push_back(&thread_current()->files, &fe->t_elem);
+	  
+	  return fe->fd;
 }
 
 /*System Call: bool remove (const char *file)
@@ -314,19 +297,18 @@ false otherwise. A file may be removed regardless of whether
 it is open or closed, and removing an open file does not close 
 it. See Removing an Open File, for details.*/
 
-bool sys_remove(const char *file){
+bool sys_remove(const char *file)
+{
   /* Deletes the file named NAME.
    Returns true if successful, false on failure.
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
   
   //bool filesys_remove (const char *name)
-  if (filesys_remove(file) == NULL)
-      return false;
-  else
-      return true;
-
- // return filesys_remove(file);
+  	if (filesys_remove(file) == NULL)
+      		return false;
+  	else
+      		return true;
 }
 
 
@@ -336,44 +318,43 @@ Returns true if successful, false otherwise. Creating a new file does
 not open it: opening the new file is a separate operation which would 
 require a open system call.*/
 
-bool sys_create(const char *file, unsigned initial_size){
+bool sys_create(const char *file, unsigned initial_size)
+{
   /* Creates a file named NAME with the given INITIAL_SIZE.
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
 
-   // bool filesys_create (const char *name, off_t initial_size)
-   if (!file)
-   {
-      sys_exit(-1);
-      return 0;
-   }
+   	if (!file)
+   	{
+      		sys_exit(-1);
+      		return 0;
+   	}
 
-  return filesys_create(file, initial_size);
+  	return filesys_create(file, initial_size);
 }
 
 /*System Call: int filesize (int fd)
 Returns the size, in bytes, of the file open as fd.*/
 
-int sys_filesize(int fd){
-   int ret = -1;
-   struct list_elem *e;
-              struct fd_entry *fe = NULL;
-         //     struct list *fd_list = &thread_current()->files;
+int sys_filesize(int fd)
+{
+   	int ret = -1;
+   	struct list_elem *e;
+        struct fd_entry *fe = NULL;
   
-              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
-              {
-                  struct fd_entry *tmp = list_entry(e, struct fd_entry, elem); 
-                   if(tmp->fd == fd)
-                   {
-                       fe = tmp;
-                       break;
-                   }
-              }
-              if (!fe)
-                  return -1;
-              ret = (int)file_length(fe->file);
-        return ret;
+        for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+      	{
+          	struct fd_entry *tmp = list_entry(e, struct fd_entry, elem); 
+           	if(tmp->fd == fd)
+           	{
+               		fe = tmp;
+               		break;
+           	}
+      	}
+      	if (!fe)
+          	return -1;
+      	return (int)file_length(fe->file);
 }
 
 /*System Call: int read (int fd, void *buffer, unsigned size)
@@ -382,42 +363,43 @@ the number of bytes actually read (0 at end of file), or -1 if
 the file could not be read (due to a condition other than end of file). 
 Fd 0 reads from the keyboard using input_getc().*/
 
-int sys_read(int fd, void *buffer, unsigned size){
-   int ret = -1;
+int sys_read(int fd, void *buffer, unsigned size)
+{
+   	int ret = -1;
 
-   if (fd == STDIN_FILENO){ // means stdin
+   	if (fd == STDIN_FILENO)
+        { // means stdin
 		for (int i = 0; i != size; i++)
                      *(uint8_t *)(buffer+i) = input_getc();
 		return (int)size;
 	}
-    else if (fd == STDOUT_FILENO)
-         return -1; 
-   else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
-   {
-	lock_release_wrapper();
-        sys_exit(-1);
-   }
+    	else if (fd == STDOUT_FILENO)
+         	return -1; 
+   	else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
+   	{
+		lock_release_wrapper();
+        	sys_exit(-1);
+   	}
         else
         {
-              struct list_elem *e;
-              struct fd_entry *fe = NULL;
-         //     struct list *fd_list = &thread_current()->files;
+              	struct list_elem *e;
+              	struct fd_entry *fe = NULL;
   
-              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
-              {
-                  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
-                   if(e1->fd == fd)
-                   {
-                       fe = e1;
-                       break;
-                   }
-              }
-              if (fe == NULL)
-                  return -1;
-              ret = (int)file_read(fe->file, buffer, size);
+              	for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+              	{
+               		struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+                   	if(e1->fd == fd)
+                   	{
+                       		fe = e1;
+                       		break;
+                   	}
+              	}
+              	if (fe == NULL)
+                  	return -1;
+              	ret = (int)file_read(fe->file, buffer, size);
         }
         return ret;
-    }
+}
 
 
 /*System Call: pid_t exec (const char *cmd_line)
@@ -427,8 +409,9 @@ should not be a valid pid, if the program cannot load or run for any reason. Thu
 the parent process cannot return from the exec until it knows whether the child process 
 successfully loaded its executable. You must use appropriate synchronization to ensure this.*/
 
-tid_t sys_exec(const char *cmd_line){
-  return process_execute (cmd_line);
+tid_t sys_exec(const char *cmd_line)
+{
+  	return process_execute (cmd_line);
 }
 
 /*System Call: int wait (pid_t pid)
@@ -465,7 +448,8 @@ to the comment at the top of the function and then implement the wait system cal
 
 Implementing this system call requires considerably more work than any of the rest.*/
 
-int sys_wait (tid_t pid){
+int sys_wait (tid_t pid)
+{
     return process_wait(pid);
 }
 
@@ -484,34 +468,35 @@ write all of buffer in one call to putbuf(), at least as long as size is
  buffers.) Otherwise, lines of text output by different processes may end up 
  interleaved on the console, confusing both human readers and our grading scripts.*/
 
-int sys_write(int fd, void *buffer, unsigned size){
-   int ret = -1;
+int sys_write(int fd, void *buffer, unsigned size)
+{
+   	int ret = -1;
 
-   if (fd == STDOUT_FILENO){
+   	if (fd == STDOUT_FILENO)
+   	{
 		putbuf((char *)buffer, (size_t)size);
 		return (int)size;
 	}
-    else if (fd == STDIN_FILENO)
-         return -1; 
-   else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
-   {
-	lock_release_wrapper();
-        sys_exit(-1);
-}
+    	else if (fd == STDIN_FILENO)
+         	return -1; 
+   	else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
+   	{
+		lock_release_wrapper();
+        	sys_exit(-1);
+	}
         else
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-         //     struct list *fd_list = &thread_current()->files;
   
               for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
               {
-                  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
-                   if(e1->fd == fd)
-                   {
-                       fe = e1;
-                       break;
-                   }
+			struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+                   	if(e1->fd == fd)
+                   	{
+                       		fe = e1;
+                       		break;
+                   	}
               }
               if (!fe)
                   return -1;
@@ -527,7 +512,8 @@ If the process's parent waits for it (see below), this is the status
 that will be returned. Conventionally, a status of 0 indicates success 
 and nonzero values indicate errors.*/
 
-void sys_exit (int status){
+void sys_exit (int status)
+{
 	struct thread *currentThread = thread_current();
         struct list_elem *l;
         
@@ -537,8 +523,8 @@ void sys_exit (int status){
              sys_close(list_entry(l, struct fd_entry, t_elem)->fd);
         }
 
-	currentThread -> exit_status = status;
-	printf ("%s: exit(%d)\n", currentThread -> name, status);
+	currentThread->exit_status = status;
+	printf ("%s: exit(%d)\n", currentThread->name, status);
 	// pass this status to a waiting parent
 	thread_exit(); //cleanup and de-allocation and waiting for parent to reap exit status
         return -1;
@@ -553,18 +539,24 @@ indicating end of file. A later write extends the file, filling any unwritten ga
  of file will return an error.) These semantics are implemented in the file system and do not 
  require any special effort in system call implementation.*/
 
-void sys_seek(int fd, unsigned position){
-   struct list_elem *e;
-   struct fd_entry *fe = NULL;
+static int sys_seek(int fd, unsigned position)
+{
+  	struct list_elem *e;
+      	struct fd_entry *fe = NULL;
 
-   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
-   {
-      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
-      if(tmp->fd == fd)
-         fe = tmp;
-         break;
-   }
-    file_seek(fe->file, position);
+      	for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+      	{
+          	struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+           	if(e1->fd == fd)
+           	{
+               		fe = e1;
+               		break;
+           	}
+      	}
+      	if (!fe)
+          	return -1;
+      	file_seek(fe->file, position);
+   	return 0; // not used
 }
 
 
@@ -572,18 +564,23 @@ void sys_seek(int fd, unsigned position){
 Returns the position of the next byte to be read or written in open file fd, expressed 
 in bytes from the beginning of the file.*/
 
-unsigned sys_tell(int fd){
-     struct list_elem *e;
-   struct fd_entry *fe = NULL;
-
-   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
-   {
-      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
-      if(tmp->fd == fd)
-         fe = tmp;
-         break;
-   }
-    return file_tell(fe->file);
+unsigned sys_tell(int fd)
+{
+	struct list_elem *e;
+        struct fd_entry *fe = NULL;
+  
+      	for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+      	{
+          	struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+           	if(e1->fd == fd)
+           	{
+               		fe = e1;
+               		break;
+           	}
+      	}
+      	if (!fe)
+          	return -1;
+      	return (int)file_tell(fe->file);
 }
 
 
@@ -591,38 +588,33 @@ unsigned sys_tell(int fd){
 Closes file descriptor fd. Exiting or terminating a process implicitly closes 
 all its open file descriptors, as if by calling this function for each one.*/
 
-void sys_close(int fd){
-        struct list_elem *e;
+void sys_close(int fd)
+{
+       	struct list_elem *e;
 	struct list *fd_list = &thread_current()->files;
 
 	for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
 	{
-	  struct fd_entry *e1 = list_entry(e, struct fd_entry, t_elem); 
-	   if(e1->fd == fd)
-	   {
-	       file_close(e1->file);
-               list_remove(&e1->elem);
-               list_remove(&e1->t_elem);
-               free(e1);
-	       break;
-	   }
+		struct fd_entry *e1 = list_entry(e, struct fd_entry, t_elem); 
+	   	if(e1->fd == fd)
+	   	{
+	       		file_close(e1->file);
+               		list_remove(&e1->elem);
+               		list_remove(&e1->t_elem);
+               		free(e1);
+	       		break;
+	   	}
 	}
 }
 
 
 void* check_address(const void *vaddr)
 {
-    if(!is_user_vaddr(vaddr))
-    {
-	sys_exit(-1);
-        return 0;
-    }
-    //void *p = pagedir_get_page(thread_current()->pagedir, vaddr);
-    //if(!p)
-    //{
-    //    sys_exit(-1);
-    //    return 0;
-   // }
+   	if(!is_user_vaddr(vaddr))
+    	{
+		sys_exit(-1);
+        	return 0;
+    	}
 
-    return vaddr;
+    	return vaddr;
 }

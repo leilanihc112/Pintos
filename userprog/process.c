@@ -18,14 +18,11 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
-//#include "userprog/syscall.h"
 
 #define LOGGING_LEVEL 6
 
 #include <log.h>
 
-struct semaphore launched;
-struct semaphore exiting;
 static thread_func start_process NO_RETURN;
 static bool load (const char *file_name, const char *cmdline, void (**eip) (void), void **esp);
 
@@ -64,11 +61,6 @@ process_execute (const char *command)
   if (cmd_copy == NULL)
     return TID_ERROR;
   strlcpy (cmd_copy, command, PGSIZE);
-  //This semaphore should really be in the thread control block (thread structure)
-  //Here its in the OS so if there are multiple processes running it would cause chaos
-//  sema_init(&launched, 0); //should be t->launched
-//  sema_init(&exiting, 0); //should be t->exiting
-
 
   /* Create a new thread to execute FILE_NAME. */
 
@@ -102,9 +94,6 @@ process_execute (const char *command)
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
-//sema_down(&launched);
-
-//  sema_down(&thread_current()->sem);
   return tid;
 }
 
@@ -121,12 +110,6 @@ start_process (void *command)
   log(L_TRACE, "start_process()");
 
   int argCount = get_arg_count(command);
-
-  // printf("%s", "****************start_process**************\n");
-  // printf("%d", argCount);
-  // printf("%s", "\n");
-  // printf("%s", command);
-  // printf("%s", "\n**********************************\n");
 
   if(argCount > 1){
     char *commandCopy = (char *)malloc(strlen(command) + 1);
@@ -150,12 +133,12 @@ start_process (void *command)
   /* If load failed, quit. */
   if (success)
   {
-    thread_current()->exe = filesys_open(executable);
-    file_deny_write(thread_current()->exe);
-    sema_up(&t->sem);
-    intr_disable();
-    thread_block();
-    intr_enable();
+      thread_current()->exe = filesys_open(executable);
+      file_deny_write(thread_current()->exe);
+      sema_up(&t->sem);
+      intr_disable();
+      thread_block();
+      intr_enable();
   }
   else
   {
@@ -169,7 +152,6 @@ start_process (void *command)
 
   palloc_free_page (command);
 
-//sema_up(&launched);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -192,77 +174,66 @@ start_process (void *command)
 int
 process_wait (tid_t child_tid)
 {
-  // Need to wait for the child to exit and then reap the childs exit status
-  struct thread *th;
+	  // Need to wait for the child to exit and then reap the childs exit status
+	  struct thread *th;
 
-  th = get_thread_by_tid(child_tid);
-  if (!th || th->status == THREAD_DYING || th->exit_status == RET_STATUS_INVALID)
-  {
-      th->exit_status = RET_STATUS_INVALID;
-      return -1;
-  }
-  if (th->exit_status != RET_STATUS_DEFAULT && th->exit_status != RET_STATUS_INVALID)
-  {
-      th->exit_status = RET_STATUS_INVALID;
-      return -1;
-  }
- //sema_down(&exiting);
- sema_down(&th->sem);
- while (th->status == THREAD_BLOCKED)
-    thread_unblock(th);
+	  th = get_thread_by_tid(child_tid);
+	  if (!th || th->status == THREAD_DYING || th->exit_status == RET_STATUS_INVALID)
+	  {
+	      	th->exit_status = RET_STATUS_INVALID;
+	      	return -1;
+	  }
+	  if (th->exit_status != RET_STATUS_DEFAULT && th->exit_status != RET_STATUS_INVALID)
+	  {
+	      	th->exit_status = RET_STATUS_INVALID;
+	      	return -1;
+	  }
+	  sema_down(&th->sem);
+	  while (th->status == THREAD_BLOCKED)
+	    	thread_unblock(th);
 
-  return th->exit_status;
-
-//  sema_down(&thread_current()->sem);
-  //here means child has exited
-  //need to get childs exit status from its thread and then return that
-  //return -1;
+	  return th->exit_status;
 }
 
 /* Free the current process's resources. */
-void
-process_exit (void)
+void process_exit (void)
 {
-  struct thread *cur = thread_current ();
-  uint32_t *pd;
+	struct thread *cur = thread_current ();
+	uint32_t *pd;
 
-  while(!list_empty(&cur->sem.waiters))
-  {
- //   sema_up(&exiting);
-      sema_up(&cur->sem);
-  }
+	while(!list_empty(&cur->sem.waiters))
+	{
+	      sema_up(&cur->sem);
+	}
 
-  //lock_acquire_wrapper();
-  file_close(cur->exe);
-  files_close_all(&thread_current()->files);
-  //lock_release_wrapper();
-  
-  cur->exe = NULL;
+	file_close(cur->exe);
+	files_close_all(&thread_current()->files);
+	  
+	cur->exe = NULL;
 
-  if (cur->parent)
-  {
-     intr_disable();
-     thread_block();
-     intr_enable();
-  }
+	if (cur->parent)
+	{
+	     intr_disable();
+	     thread_block();
+	     intr_enable();
+	}
 
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-  pd = cur->pagedir;
-  if (pd != NULL)
-    {
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate (NULL);
-      pagedir_destroy (pd);
-    }
-//sema_up(&exiting);
+	  /* Destroy the current process's page directory and switch back
+	     to the kernel-only page directory. */
+	pd = cur->pagedir;
+	if (pd != NULL)
+	{
+	      /* Correct ordering here is crucial.  We must set
+		 cur->pagedir to NULL before switching page directories,
+		 so that a timer interrupt can't switch back to the
+		 process page directory.  We must activate the base page
+		 directory before destroying the process's page
+		 directory, or our active page directory will be one
+		 that's been freed (and cleared). */
+	      cur->pagedir = NULL;
+	      pagedir_activate (NULL);
+	      pagedir_destroy (pd);
+	}
 }
 
 /* Sets up the CPU for running user code in the current
