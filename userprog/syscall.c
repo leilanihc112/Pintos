@@ -30,10 +30,20 @@ struct fd_entry
    struct list_elem elem;
 };
 
+static struct list f_list;
+
+static int alloc_fid(void)
+{
+   static int fid = 2;
+   return fid++;
+}
+
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall"); //Registering a handler for TRAP
+
+  list_init(&f_list);
 }
 
 static void
@@ -271,6 +281,12 @@ int sys_open(const char *file){
 
   //struct file *filesys_open (const char *name)
   struct file *f;
+  struct fd_entry *fe;
+ 
+  if (!file)
+     return -1;
+  if (!is_user_vaddr(file))
+    sys_exit(-1);
 
   f = filesys_open(file);
 
@@ -348,11 +364,20 @@ the file could not be read (due to a condition other than end of file).
 Fd 0 reads from the keyboard using input_getc().*/
 
 int sys_read(int fd, void *buffer, unsigned size){
-   if (fd == 0){ // means stdin
+   int ret = -1;
+
+   if (fd == STDIN_FILENO){ // means stdin
 		for(unsigned i =0; i != size; i++)
                    *(uint8_t *)(buffer+i) = input_getc();
 		return (int)size;
-	} 
+	}
+    else if (fd == STDOUT_FILENO)
+         return -1; 
+    else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
+   {
+        lock_release_wrapper();
+        sys_exit(-1);
+}
         else
         {
               struct list_elem *e;
@@ -368,11 +393,13 @@ int sys_read(int fd, void *buffer, unsigned size){
                        break;
                    }
               }
-              if (fe != NULL)
-                  return (int)file_read(fe->file,buffer, size);
-              else
+              if (!fe)
                   return -1;
-        }// for else need to figure out more stuff about file descriptors
+              else
+                  ret = (int)file_read(fe->file, buffer, size);
+        }
+ 
+        return ret;
 }
 
 
@@ -441,10 +468,19 @@ write all of buffer in one call to putbuf(), at least as long as size is
  interleaved on the console, confusing both human readers and our grading scripts.*/
 
 int sys_write(int fd, void *buffer, unsigned size){
-	if (fd == 1){ // means stdout
+   int ret = -1;
+
+   if (fd == STDOUT_FILENO){ // means stdin
 		putbuf((char *)buffer, (size_t)size);
 		return (int)size;
-	} 
+	}
+    else if (fd == STDIN_FILENO)
+         return -1; 
+   else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
+   {
+	lock_release_wrapper();
+        sys_exit(-1);
+}
         else
         {
               struct list_elem *e;
@@ -460,11 +496,11 @@ int sys_write(int fd, void *buffer, unsigned size){
                        break;
                    }
               }
-              if (fe != NULL)
-                  return (int)file_write(fe->file,buffer, size);
-              else
+              if (!fe)
                   return -1;
-        }// for else need to figure out more stuff about file descriptors
+              ret = (int)file_write(fe->file, buffer, size);
+        }
+        return ret;
 }
 
 

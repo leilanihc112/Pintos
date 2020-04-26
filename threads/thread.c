@@ -95,7 +95,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  lock_init(&filesys_lock);
+  //lock_init(&filesys_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -106,7 +106,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
-void lock_acquire_wrapper()
+/*void lock_acquire_wrapper()
 {
     lock_acquire(&filesys_lock);
 }
@@ -114,7 +114,7 @@ void lock_acquire_wrapper()
 void lock_release_wrapper()
 {
     lock_release(&filesys_lock);
-}
+}*/
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
@@ -219,9 +219,18 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   intr_set_level (old_level);
-
-  /* Add to run queue. */
+    /* Add to run queue. */
   thread_unblock (t);
+
+#ifdef USERPROG
+  sema_init(&t->sem, 0);
+  t->exit_status = RET_STATUS_DEFAULT;
+  list_init(&t->files);
+  list_init(&t->child_process);
+  if (thread_current() != initial_thread)
+     list_push_back(&thread_current()->child_process, &t->child_elem);
+  t->parent = thread_current();
+#endif
 
   return tid;
 }
@@ -305,7 +314,30 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
+  struct list_elem *l;
+  struct thread *t, *cur;
+  
+  cur = thread_current();
+
+  for (l = list_begin (&cur->child_process); l != list_end (&cur->child_process); l = list_next (l))
+    {
+      t = list_entry (l, struct thread, child_elem);
+      if (t->status == THREAD_BLOCKED)
+        thread_unblock(t);
+      else
+      {
+          t->parent = NULL;
+          list_remove(&t->child_elem);
+      }
+        
+    }
+
   process_exit ();
+  
+  ASSERT(list_size(&cur->files) == 0);
+  
+  if(cur->parent && cur->parent != initial_thread)
+     list_remove(&cur->child_elem);
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -446,7 +478,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void)
@@ -484,9 +516,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  list_init(&t->files);
-  t->parent = running_thread();
-  sema_init(&t->sem,0);
 
   list_push_back (&all_list, &t->allelem);
 }
@@ -600,7 +629,21 @@ allocate_tid (void)
 
   return tid;
 }
-
+
+struct thread * get_thread_by_tid (tid_t tid)
+{
+    struct list_elem *e;
+    struct thread *t;
+
+    t = NULL;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+    {
+        t = list_entry(e, struct thread, allelem);
+        ASSERT(is_thread(t));
+        if (t->tid == tid)
+           return t;
+    }
+}
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

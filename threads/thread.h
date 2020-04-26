@@ -26,6 +26,11 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#ifdef USERPROG
+#define RET_STATUS_DEFAULT 0x600d600d
+#define RET_STATUS_INVALID 0xbadbadba
+#endif
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -98,11 +103,14 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    int32_t exit_status;
-#endif
+    struct semaphore sem;    
+    int exit_status;
     struct list files;
-    struct semaphore sem;
-    struct thread* parent;
+    struct file *exe;
+    struct thread *parent;
+    struct list child_process;
+    struct list_elem child_elem;
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
