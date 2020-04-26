@@ -113,15 +113,15 @@ each system call's arguments from the stack.*/
     	}
   	case SYS_WRITE:
     	{  // Called to output to either a file or stdout. This is hack need to find a way to do it generically
-	       check_address(*(user_esp+1));
-	       check_address(*(user_esp+2));
-	       check_address(*(user_esp+3));
-	       int fd = (int)(*(user_esp + 1));
-	       void* buffer = (void*)(*(user_esp + 2)); 
-	       unsigned size = (unsigned)(*(user_esp + 3));
-	       lock_acquire_wrapper();
-	       f -> eax = sys_write(fd, buffer, size);
-	       lock_release_wrapper();
+	        check_address(*(user_esp+1));
+	        check_address(*(user_esp+2));
+	        check_address(*(user_esp+3));
+	        int fd = (int)(*(user_esp + 1));
+	        void* buffer = (void*)(*(user_esp + 2)); 
+	        unsigned size = (unsigned)(*(user_esp + 3));
+	        lock_acquire_wrapper();
+	        f -> eax = sys_write(fd, buffer, size);
+	        lock_release_wrapper();
 	    	break;
     	}
   	case SYS_EXIT:

@@ -198,6 +198,7 @@ process_wait (tid_t child_tid)
                 int ret = th->exit_status;
 	      	th->exit_status = EXIT_STATUS_INVALID;
 	      	return ret;
+
 	  }
 	  sema_down(&th->sem);
 	  while (th->status == THREAD_BLOCKED)
