@@ -66,8 +66,8 @@ process_execute (const char *command)
   strlcpy (cmd_copy, command, PGSIZE);
   //This semaphore should really be in the thread control block (thread structure)
   //Here its in the OS so if there are multiple processes running it would cause chaos
-  sema_init(&launched, 0); //should be t->launched
-  sema_init(&exiting, 0); //should be t->exiting
+//  sema_init(&launched, 0); //should be t->launched
+//  sema_init(&exiting, 0); //should be t->exiting
 
 
   /* Create a new thread to execute FILE_NAME. */
@@ -83,11 +83,26 @@ process_execute (const char *command)
   executable = token;
   //***********************************
 
-  tid = thread_create (executable, PRI_DEFAULT, start_process, cmd_copy);
+  tid = thread_create (commandCopy, PRI_DEFAULT, start_process, cmd_copy);
+  if (tid == TID_ERROR)
+  {
+    palloc_free_page (cmd_copy);
+    return tid;
+  }
+
+  struct thread *t = get_thread_by_tid(tid);
+  sema_down(&t->sem);
+  if(t->exit_status == -1)
+     tid = TID_ERROR;
+  while (t->status == THREAD_BLOCKED)
+     thread_unblock(t);
+  if (t->exit_status == -1)
+     process_wait(t->tid);
+
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
-sema_down(&launched);
+//sema_down(&launched);
 
 //  sema_down(&thread_current()->sem);
   return tid;
@@ -101,6 +116,7 @@ start_process (void *command)
   char *executable;
   struct intr_frame if_;
   bool success;
+  struct thread *t;
 
   log(L_TRACE, "start_process()");
 
@@ -130,19 +146,30 @@ start_process (void *command)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (executable, command, &if_.eip, &if_.esp);
 
+  t = thread_current();
   /* If load failed, quit. */
-  palloc_free_page (command);
-  if (!success)
+  if (success)
   {
- //   sema_up(&thread_current()->parent->sem);
-    thread_exit ();
+    thread_current()->exe = filesys_open(executable);
+    file_deny_write(thread_current()->exe);
+    sema_up(&t->sem);
+    intr_disable();
+    thread_block();
+    intr_enable();
   }
   else
   {
-//      sema_up(&thread_current()->parent->sem);
+      thread_current()->exit_status = -1;
+      sema_up(&t->sem);
+      intr_disable();
+      thread_block();
+      intr_enable();
+      thread_exit();
   }
 
-sema_up(&launched);
+  palloc_free_page (command);
+
+//sema_up(&launched);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -163,10 +190,29 @@ sema_up(&launched);
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
   // Need to wait for the child to exit and then reap the childs exit status
-sema_down(&exiting);
+  struct thread *th;
+
+  th = get_thread_by_tid(child_tid);
+  if (!th || th->status == THREAD_DYING || th->exit_status == RET_STATUS_INVALID)
+  {
+      th->exit_status = RET_STATUS_INVALID;
+      return -1;
+  }
+  if (th->exit_status != RET_STATUS_DEFAULT && th->exit_status != RET_STATUS_INVALID)
+  {
+      th->exit_status = RET_STATUS_INVALID;
+      return -1;
+  }
+ //sema_down(&exiting);
+ sema_down(&th->sem);
+ while (th->status == THREAD_BLOCKED)
+    thread_unblock(th);
+
+  return th->exit_status;
+
 //  sema_down(&thread_current()->sem);
   //here means child has exited
   //need to get childs exit status from its thread and then return that
@@ -180,9 +226,25 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  lock_acquire_wrapper();
+  while(!list_empty(&cur->sem.waiters))
+  {
+ //   sema_up(&exiting);
+      sema_up(&cur->sem);
+  }
+
+  //lock_acquire_wrapper();
+  file_close(cur->exe);
   files_close_all(&thread_current()->files);
-  lock_release_wrapper();
+  //lock_release_wrapper();
+  
+  cur->exe = NULL;
+
+  if (cur->parent)
+  {
+     intr_disable();
+     thread_block();
+     intr_enable();
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -200,7 +262,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-sema_up(&exiting);
+//sema_up(&exiting);
 }
 
 /* Sets up the CPU for running user code in the current
