@@ -28,6 +28,7 @@ struct fd_entry
    int fd;
    struct file *file;
    struct list_elem elem;
+   struct list_elem t_elem;
 };
 
 static struct list f_list;
@@ -292,8 +293,19 @@ int sys_open(const char *file){
 
   if (!f)
      return -1;
+
+  fe = (struct fd_entry *)malloc(sizeof(struct fd_entry));
+  if (!fe)
+  {
+      file_close(f);
+  }
+
+  fe->file = f;
+  fe->fd = alloc_fid();
+  list_push_back(&f_list, &fe->elem);
+  list_push_back(&thread_current()->files, &fe->t_elem);
   
-  return f;
+  return fe->fd;
 }
 
 /*System Call: bool remove (const char *file)
@@ -382,9 +394,9 @@ int sys_read(int fd, void *buffer, unsigned size){
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-              struct list *fd_list = &thread_current()->files;
+              //struct list *fd_list = &thread_current()->files;
   
-              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
               {
                   struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
                    if(e1->fd == fd)
@@ -485,9 +497,9 @@ int sys_write(int fd, void *buffer, unsigned size){
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-              struct list *fd_list = &thread_current()->files;
+         //     struct list *fd_list = &thread_current()->files;
   
-              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
+              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
               {
                   struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
                    if(e1->fd == fd)
@@ -517,7 +529,7 @@ void sys_exit (int status){
         while (!list_empty(&currentThread->files))
         {
              l = list_begin(&currentThread->files);
-             sys_close(list_entry(l, struct fd_entry, elem)->fd);
+             sys_close(list_entry(l, struct fd_entry, t_elem)->fd);
         }
 
 	currentThread -> exit_status = status;
@@ -576,16 +588,17 @@ all its open file descriptors, as if by calling this function for each one.*/
 
 void sys_close(int fd){
         struct list_elem *e;
-	struct fd_entry *fe = NULL;
 	struct list *fd_list = &thread_current()->files;
 
 	for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
 	{
-	  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
+	  struct fd_entry *e1 = list_entry(e, struct fd_entry, t_elem); 
 	   if(e1->fd == fd)
 	   {
 	       file_close(e1->file);
-               list_remove(e);
+               list_remove(&e1->elem);
+               list_remove(&e1->t_elem);
+               free(e1);
 	       break;
 	   }
 	}
