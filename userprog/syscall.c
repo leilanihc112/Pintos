@@ -379,22 +379,22 @@ int sys_read(int fd, void *buffer, unsigned size){
    int ret = -1;
 
    if (fd == STDIN_FILENO){ // means stdin
-		for(unsigned i =0; i != size; i++)
-                   *(uint8_t *)(buffer+i) = input_getc();
+		for (unsigned i = 0; i != size; i++)
+                     *(uint8_t *)(buffer+i) = input_getc();
 		return (int)size;
 	}
     else if (fd == STDOUT_FILENO)
          return -1; 
-    else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
+   else if (!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size))
    {
-        lock_release_wrapper();
+	lock_release_wrapper();
         sys_exit(-1);
 }
         else
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-              //struct list *fd_list = &thread_current()->files;
+         //     struct list *fd_list = &thread_current()->files;
   
               for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
               {
@@ -407,10 +407,8 @@ int sys_read(int fd, void *buffer, unsigned size){
               }
               if (!fe)
                   return -1;
-              else
-                  ret = (int)file_read(fe->file, buffer, size);
+              ret = (int)file_read(fe->file, buffer, size);
         }
- 
         return ret;
 }
 
@@ -482,7 +480,7 @@ write all of buffer in one call to putbuf(), at least as long as size is
 int sys_write(int fd, void *buffer, unsigned size){
    int ret = -1;
 
-   if (fd == STDOUT_FILENO){ // means stdin
+   if (fd == STDOUT_FILENO){
 		putbuf((char *)buffer, (size_t)size);
 		return (int)size;
 	}
