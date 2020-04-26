@@ -76,8 +76,12 @@ process_execute (const char *command)
   tid = thread_create (executable, PRI_DEFAULT, start_process, cmd_copy);
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
-
-  sema_down(&launched);
+  // log(L_TRACE, "Thread Created: %d", tid);
+  // log(L_TRACE, "Thread Name: %s", find_thread_by_tid(tid)->name);
+  // log(L_TRACE, "Thread Launched Status: %d", &(find_thread_by_tid(tid)->launched)->value);
+  //log(L_TRACE, "T: %s", command);
+  //sema_down(&launched);
+  sema_down(find_thread_by_tid(tid)->launched);
   return tid;
 }
 
@@ -89,6 +93,7 @@ start_process (void *command)
   char *executable;
   struct intr_frame if_;
   bool success;
+  struct thread *currentThread = thread_current();
 
   log(L_TRACE, "start_process()");
 
@@ -123,7 +128,9 @@ start_process (void *command)
   if (!success)
     thread_exit ();
 
-  sema_up(&launched);
+  struct thread *currentThread1 = find_thread_by_tid(thread_tid());
+  sema_up(currentThread1->launched);
+  //sema_up(&launched);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -144,12 +151,14 @@ start_process (void *command)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
   // Need to wait for the child to exit and then reap the childs exit status
-  sema_down(&exiting);
+  //sema_down(&exiting);
+  sema_down(find_thread_by_tid(child_tid)->exiting);
   //here means child has exited
   //need to get childs exit status from its thread and then return that
+  return find_thread_by_tid(child_tid) -> exit_status;
   //return -1;
 }
 
@@ -176,7 +185,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-    sema_up(&exiting);
+    sema_up(cur->exiting);
+    //sema_up(&exiting);
 }
 
 /* Sets up the CPU for running user code in the current

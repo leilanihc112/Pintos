@@ -174,6 +174,8 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
+  struct semaphore launched;
+  struct semaphore exiting;
 
   ASSERT (function != NULL);
 
@@ -185,6 +187,13 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  //   initial_thread->launched = &launched;
+  // initial_thread->exiting = &exiting; 
+  t->launched = &launched;
+  t->exiting = &exiting;
+  sema_init (t->launched, 0);
+  sema_init (t->exiting, 0);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -497,6 +506,25 @@ next_thread_to_run (void)
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+}
+
+/* MD : If a thread exists with that TID return it, otherwise return null*/
+struct thread * 
+find_thread_by_tid(tid_t tid){
+  //basing this off of forEach function above
+  struct list_elem *e;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      
+      if(t->tid == tid) {
+        return t;
+      }
+    }
+
+  return NULL;
 }
 
 /* Completes a thread switch by activating the new thread's page

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -97,6 +98,9 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int32_t exit_status;
+    //Added in these two semaphores
+    struct semaphore *launched; //Used by parent to know when the thread has successfully launched
+    struct semaphore *exiting; //Used by thread to know that parent acknowledges that they're done and they can shutdown
 #endif
 
     /* Owned by thread.c. */
@@ -130,6 +134,7 @@ void thread_yield (void);
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
+struct thread * find_thread_by_tid(tid_t tid);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
