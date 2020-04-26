@@ -28,23 +28,12 @@ struct fd_entry
    int fd;
    struct file *file;
    struct list_elem elem;
-   struct list_elem t_elem;
 };
-
-static struct list f_list;
-
-static int alloc_fid(void)
-{
-   static int fid = 2;
-   return fid++;
-}
 
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall"); //Registering a handler for TRAP
-
-  list_init(&f_list);
 }
 
 static void
@@ -282,29 +271,13 @@ int sys_open(const char *file){
 
   //struct file *filesys_open (const char *name)
   struct file *f;
-  struct fd_entry *fe;
- 
-  if (!file)
-     return -1;
 
   f = filesys_open(file);
 
   if (!f)
      return -1;
   
-  fe = (struct fd_entry *)malloc(sizeof(struct fd_entry));
-  if (!fe)
-  {
-     file_close(f);
-     return -1;
-  }
-
-  fe->file = f;
-  fe->fd = alloc_fid();
-  list_push_back(&f_list, &fe->elem);
-  list_push_back(&thread_current()->files, &fe->t_elem);
-  
-  return fe->fd;
+  return f;
 }
 
 /*System Call: bool remove (const char *file)
@@ -375,20 +348,18 @@ the file could not be read (due to a condition other than end of file).
 Fd 0 reads from the keyboard using input_getc().*/
 
 int sys_read(int fd, void *buffer, unsigned size){
-   if (fd == STDIN_FILENO){ // means stdin
+   if (fd == 0){ // means stdin
 		for(unsigned i =0; i != size; i++)
                    *(uint8_t *)(buffer+i) = input_getc();
 		return (int)size;
-	}
-    else if (fd == STDOUT_FILENO)
-         return -1; 
+	} 
         else
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-              //struct list *fd_list = &thread_current()->files;
+              struct list *fd_list = &thread_current()->files;
   
-              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
               {
                   struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
                    if(e1->fd == fd)
@@ -397,9 +368,10 @@ int sys_read(int fd, void *buffer, unsigned size){
                        break;
                    }
               }
-              if (!fe)
+              if (fe != NULL)
+                  return (int)file_read(fe->file,buffer, size);
+              else
                   return -1;
-              return (int)file_read(fe->file, buffer, size);
         }// for else need to figure out more stuff about file descriptors
 }
 
@@ -469,19 +441,17 @@ write all of buffer in one call to putbuf(), at least as long as size is
  interleaved on the console, confusing both human readers and our grading scripts.*/
 
 int sys_write(int fd, void *buffer, unsigned size){
-   if (fd == STDOUT_FILENO){ // means stdin
+	if (fd == 1){ // means stdout
 		putbuf((char *)buffer, (size_t)size);
 		return (int)size;
-	}
-    else if (fd == STDIN_FILENO)
-         return -1; 
+	} 
         else
         {
               struct list_elem *e;
               struct fd_entry *fe = NULL;
-              //struct list *fd_list = &thread_current()->files;
+              struct list *fd_list = &thread_current()->files;
   
-              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+              for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
               {
                   struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
                    if(e1->fd == fd)
@@ -490,9 +460,10 @@ int sys_write(int fd, void *buffer, unsigned size){
                        break;
                    }
               }
-              if (!fe)
+              if (fe != NULL)
+                  return (int)file_write(fe->file,buffer, size);
+              else
                   return -1;
-              return (int)file_write(fe->file, buffer, size);
         }// for else need to figure out more stuff about file descriptors
 }
 
@@ -569,17 +540,16 @@ all its open file descriptors, as if by calling this function for each one.*/
 
 void sys_close(int fd){
         struct list_elem *e;
+	struct fd_entry *fe = NULL;
 	struct list *fd_list = &thread_current()->files;
 
 	for(e = list_begin(fd_list); e != list_end(fd_list); e = list_next(e))
 	{
-	  struct fd_entry *e1 = list_entry(e, struct fd_entry, t_elem); 
+	  struct fd_entry *e1 = list_entry(e, struct fd_entry, elem); 
 	   if(e1->fd == fd)
 	   {
 	       file_close(e1->file);
-               list_remove(&e1->elem);
-               list_remove(&e1->t_elem);
-               free(e1);
+               list_remove(e);
 	       break;
 	   }
 	}
