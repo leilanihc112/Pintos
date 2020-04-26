@@ -224,7 +224,7 @@ thread_create (const char *name, int priority,
 
 #ifdef USERPROG
   sema_init(&t->sem, 0);
-  t->exit_status = RET_STATUS_DEFAULT;
+  t->exit_status = EXIT_STATUS_DEFAULT;
   list_init(&t->files);
   list_init(&t->child_process);
   if (thread_current() != initial_thread)

@@ -27,8 +27,8 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 #ifdef USERPROG
-#define RET_STATUS_DEFAULT 0x600d600d
-#define RET_STATUS_INVALID 0xbadbadba
+#define EXIT_STATUS_DEFAULT 0x600d600d
+#define EXIT_STATUS_INVALID 0xbadbadba
 #endif
 
 /* A kernel thread or user process.
