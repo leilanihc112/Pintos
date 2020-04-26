@@ -356,17 +356,24 @@ bool sys_create(const char *file, unsigned initial_size){
 Returns the size, in bytes, of the file open as fd.*/
 
 int sys_filesize(int fd){
+   int ret = -1;
    struct list_elem *e;
-   struct fd_entry *fe = NULL;
-
-   for(e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e))
-   {
-      struct fd_entry *tmp = list_entry(e, struct fd_entry, elem);
-      if(tmp->fd == fd)
-         fe = tmp;
-         break;
-   }
-    return file_length(fe->file);
+              struct fd_entry *fe = NULL;
+         //     struct list *fd_list = &thread_current()->files;
+  
+              for(e = list_begin(&f_list); e != list_end(&f_list); e = list_next(e))
+              {
+                  struct fd_entry *tmp = list_entry(e, struct fd_entry, elem); 
+                   if(tmp->fd == fd)
+                   {
+                       fe = tmp;
+                       break;
+                   }
+              }
+              if (!fe)
+                  return -1;
+              ret = (int)file_length(fe->file);
+        return ret;
 }
 
 /*System Call: int read (int fd, void *buffer, unsigned size)
@@ -379,7 +386,7 @@ int sys_read(int fd, void *buffer, unsigned size){
    int ret = -1;
 
    if (fd == STDIN_FILENO){ // means stdin
-		for (unsigned i = 0; i != size; i++)
+		for (int i = 0; i != size; i++)
                      *(uint8_t *)(buffer+i) = input_getc();
 		return (int)size;
 	}
@@ -389,7 +396,7 @@ int sys_read(int fd, void *buffer, unsigned size){
    {
 	lock_release_wrapper();
         sys_exit(-1);
-}
+   }
         else
         {
               struct list_elem *e;
@@ -405,12 +412,12 @@ int sys_read(int fd, void *buffer, unsigned size){
                        break;
                    }
               }
-              if (!fe)
+              if (fe == NULL)
                   return -1;
               ret = (int)file_read(fe->file, buffer, size);
         }
         return ret;
-}
+    }
 
 
 /*System Call: pid_t exec (const char *cmd_line)
