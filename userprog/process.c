@@ -66,18 +66,25 @@ process_execute (const char *command)
 
   //**********************************
   //Added this in to get args-single vs args-single onearg: exit(0)
-  char *executable;
   char *commandCopy = (char *)malloc(strlen(command) + 1);
-  strlcpy(commandCopy, command, strlen(command) + 1);
+  if (!commandCopy)
+  {
+    free(commandCopy);
+    if (tid == TID_ERROR)
+        palloc_free_page (cmd_copy);
+    return tid;
+  }
+    
+  memcpy(commandCopy, command, strlen(command) + 1);
 
-  char *token, *save_ptr;
-  token = strtok_r (commandCopy, " ", &save_ptr);
-  executable = token;
+  char *save_ptr;
+  command = strtok_r (commandCopy, " ", &save_ptr);
   //***********************************
 
-  tid = thread_create (commandCopy, PRI_DEFAULT, start_process, cmd_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create(commandCopy, PRI_DEFAULT, start_process, cmd_copy);
+  if (tid == TID_ERROR) 
   {
+    free(commandCopy);
     palloc_free_page (cmd_copy);
     return tid;
   }
@@ -91,6 +98,7 @@ process_execute (const char *command)
   if (t->exit_status == -1)
      process_wait(t->tid);
 
+  free(commandCopy);
   if (tid == TID_ERROR)
     palloc_free_page (cmd_copy);
 
@@ -111,14 +119,17 @@ start_process (void *command)
 
   int argCount = get_arg_count(command);
 
-  if(argCount > 1){
+  if(argCount > 1)
+  {
     char *commandCopy = (char *)malloc(strlen(command) + 1);
     strlcpy(commandCopy, command, strlen(command) + 1);
 
     char *token, *save_ptr;
     token = strtok_r (commandCopy, " ", &save_ptr);
     executable = token;
-  } else {
+  } 
+  else 
+  {
     executable = command; 
   }
 
@@ -174,19 +185,19 @@ start_process (void *command)
 int
 process_wait (tid_t child_tid)
 {
-	  // Need to wait for the child to exit and then reap the childs exit status
 	  struct thread *th;
 
 	  th = get_thread_by_tid(child_tid);
-	  if (!th || th->status == THREAD_DYING || th->exit_status == RET_STATUS_INVALID)
+	  if (!th || th->status == THREAD_DYING || th->exit_status == EXIT_STATUS_INVALID)
 	  {
-	      	th->exit_status = RET_STATUS_INVALID;
+	      	th->exit_status = EXIT_STATUS_INVALID;
 	      	return -1;
 	  }
-	  if (th->exit_status != RET_STATUS_DEFAULT && th->exit_status != RET_STATUS_INVALID)
+	  if (th->exit_status != EXIT_STATUS_DEFAULT && th->exit_status != EXIT_STATUS_INVALID)
 	  {
-	      	th->exit_status = RET_STATUS_INVALID;
-	      	return -1;
+                int ret = th->exit_status;
+	      	th->exit_status = EXIT_STATUS_INVALID;
+	      	return ret;
 	  }
 	  sema_down(&th->sem);
 	  while (th->status == THREAD_BLOCKED)

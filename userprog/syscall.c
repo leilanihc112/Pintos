@@ -50,44 +50,18 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
-  //printf ("system call!\n");
   uint32_t callNo;
   uint32_t *user_esp = f -> esp;
-  //uint32_t arg1, arg2, arg3;
-
-
-  //Might need more checks here to see if user_esp is valid 
-  /* static inline bool is_user_vaddr (const void *vaddr)
-  Returns true if VADDR is a user virtual address. */
-  //basically checks if user_esp is below phys_base
-  //Check that every possible value to be used is valid
 
   /*Looks up the physical address that corresponds to user virtual
    address UADDR in PD.  Returns the kernel virtual address
    corresponding to that physical address, or a null pointer if
    UADDR is unmapped. */
-  //check if address is in a page
 
-  //Need to find a better way of doing this, its pretty hacky and was just trying something out
-/*  if(!is_user_vaddr(user_esp) || 
-     !is_user_vaddr(user_esp + 1) || 
-     !is_user_vaddr(user_esp + 2) || 
-     !is_user_vaddr(user_esp + 3) || 
-     pagedir_get_page(thread_current()->pagedir,user_esp)==NULL ||
-     pagedir_get_page(thread_current()->pagedir,user_esp + 1)==NULL || 
-     pagedir_get_page(thread_current()->pagedir,user_esp + 2)==NULL || 
-     pagedir_get_page(thread_current()->pagedir,user_esp + 3)==NULL){
-    sys_exit(-1);
-  } */
 
   check_address(user_esp);
 
   callNo = (uint32_t)(*user_esp);
-  //Hack because there might not be an arg1
-  //Do a generic struct that knows how many arguments there are
-  //Need to rewatch https://utexas.zoom.us/rec/play/75cvcbz7qz43EoGV5gSDC_VxW466fa2s1yBK8_tenk6xAHEBM1Sib-dBYbOqLbHUVWriBGOh0irr3VYV
-  //https://static1.squarespace.com/static/5b18aa0955b02c1de94e4412/t/5b85fad2f950b7b16b7a2ed6/1535507195196/Pintos+Guide
-
 
   /*The caller pushes each of the function's arguments on the stack one by one, 
   normally using the PUSH assembly language instruction. Arguments are pushed in 
@@ -152,9 +126,6 @@ each system call's arguments from the stack.*/
     	}
   	case SYS_EXIT:
     	{
-  		//user_esp++;
-  		//arg1 = (uint32_t)(*user_esp);
-  		//sys_exit(arg1); //arg1 has the exit status in it
                 check_address(*(user_esp+1));
                 sys_exit((int)(*(user_esp+1)));
   		break;
@@ -304,7 +275,6 @@ bool sys_remove(const char *file)
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
   
-  //bool filesys_remove (const char *name)
   	if (filesys_remove(file) == NULL)
       		return false;
   	else
