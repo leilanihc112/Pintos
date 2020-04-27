@@ -30,14 +30,15 @@ void allocate_stack_argv(const char *cmdstr, void **esp, int argc, uint32_t *arg
 int get_arg_count(const char *cmdstr);
 void stack_padding(int num_pads, void **esp);
 
+void files_close_all(struct list* files);
+
 struct fd_entry
 {
    int fd;
    struct file *file;
    struct list_elem elem;
+   struct list_elem t_elem;
 };
-
-void files_close_all(struct list* files);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)

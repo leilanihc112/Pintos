@@ -23,6 +23,8 @@ int sys_wait (tid_t pid);
 
 void* check_address(const void *vaddr);
 
+static struct list f_list;
+
 struct fd_entry
 {
    int fd;
@@ -30,8 +32,6 @@ struct fd_entry
    struct list_elem elem;
    struct list_elem t_elem;
 };
-
-static struct list f_list;
 
 static int alloc_fid(void)
 {
