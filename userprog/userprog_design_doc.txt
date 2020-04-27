@@ -28,11 +28,29 @@ Leilani Horlander-Cruz <leilanihc112@utexas.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct fd_entry  // Struct to insert files and respective file descriptors list for the current thread
+{
+   int fd;
+   struct file *file;
+   struct list_elem elem;
+   struct list_elem t_elem;
+};
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
+
+For argument parsing to work we had to make several modifications to process.c. 
+
+In process_execute we first create a copy of the const char* command passed in and then use strtok_r to parse out the first parameter. This is so that we can set the thread name correctly in thread_create. We then follow a similiar process inside of start_process, if the number of arguments passed in is greater than 1 we once again create a copy of the command passed in and use strtok_r to parse out the first parameter which will serve as our executable that will be passed into the load function. 
+
+Inside load, setup_stack is called which is responsible for setting up our stack. The setup_stack function calls allocate_stack_argv which will perform the actual pushing of arguments onto the stack while storing each argv[i] location inside of an array called argv. It will conclude by calling stack_padding which performs the padding neccessary in order to get the stack into the correct format. Once stack_padding has completed successfully we increment the esp by 4 and set the last position to 0 as this is the argv[argc] location. 
+
+ After allocate_stack_argv returns successfully, we later use the argv array to set up the rest of our stack by starting at the argc - 1 location of argv and decrementing down. In each iteration of this loop we push the location stored at argv[i] and decrement the stack by 4. Once we've looped through all of the argv array we then push the argv pointer onto the stack by pointing it to the previous "slot" with (*esp + 4). Argc will then be pushed to the stack with the value set to the number of arguments previously determined by the get_arg_count method. Finally we set our return value to 0 and our stack has been set up. 
+
+ We dont concern ourselves with a potential overflow of the stack page here and instead opt to check if esp is valid every time we need to use it. If the esp is not valid at that point in time we use sys_exit(-1) to terminate the process.  
 
 ---- RATIONALE ----
 
