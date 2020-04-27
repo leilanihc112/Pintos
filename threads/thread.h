@@ -26,10 +26,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-#ifdef USERPROG
 #define EXIT_STATUS_DEFAULT 0x600d600d
 #define EXIT_STATUS_INVALID 0xbadbadba
-#endif
 
 /* A kernel thread or user process.
 
@@ -103,6 +101,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+#endif
     struct semaphore sem;    
     int exit_status;
     struct list files;
@@ -110,8 +109,6 @@ struct thread
     struct thread *parent;
     struct list child_process;
     struct list_elem child_elem;
-    bool exit;
-#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

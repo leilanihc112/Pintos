@@ -206,7 +206,6 @@ process_wait (tid_t child_tid)
 	      	return ret;
 	  }
 	  sema_down(&th->sem);
-          printf ("%s: exit(%d)\n", th->name, th->exit_status);
 	  while (th->status == THREAD_BLOCKED)
 	    	thread_unblock(th);
 
@@ -230,7 +229,6 @@ void process_exit (void)
 	files_close_all(&thread_current()->files);
 	  
 	cur->exe = NULL;
-        cur->exit = true;
 
 	if (cur->parent)
 	{

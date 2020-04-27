@@ -222,7 +222,6 @@ thread_create (const char *name, int priority,
     /* Add to run queue. */
   thread_unblock (t);
 
-#ifdef USERPROG
   sema_init(&t->sem, 0);
   t->exit_status = EXIT_STATUS_DEFAULT;
   list_init(&t->files);
@@ -230,8 +229,6 @@ thread_create (const char *name, int priority,
   if (thread_current() != initial_thread)
      list_push_back(&thread_current()->child_process, &t->child_elem);
   t->parent = thread_current();
-  t->exit = false;
-#endif
 
   return tid;
 }
@@ -314,7 +311,6 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
   struct list_elem *l;
   struct thread *t, *cur;
   
@@ -323,7 +319,7 @@ thread_exit (void)
   for (l = list_begin (&cur->child_process); l != list_end (&cur->child_process); l = list_next (l))
     {
       t = list_entry (l, struct thread, child_elem);
-      if (t->status == THREAD_BLOCKED && t->exit)
+      if (t->status == THREAD_BLOCKED)
         thread_unblock(t);
       else
       {
@@ -339,7 +335,6 @@ thread_exit (void)
   
   if(cur->parent && cur->parent != initial_thread)
      list_remove(&cur->child_elem);
-#endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
