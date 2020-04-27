@@ -110,6 +110,7 @@ struct thread
     struct thread *parent;
     struct list child_process;
     struct list_elem child_elem;
+    bool exit;
 #endif
 
     /* Owned by thread.c. */

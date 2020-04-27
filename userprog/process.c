@@ -105,12 +105,15 @@ process_execute (const char *command)
   return tid;
 }
 
+
 /* A thread function that loads a user process and starts it
    running. */
+
+
 static void
 start_process (void *command)
 {
-  char *executable;
+  char *executable = command;
   struct intr_frame if_;
   bool success;
   struct thread *t;
@@ -141,6 +144,7 @@ start_process (void *command)
   success = load (executable, command, &if_.eip, &if_.esp);
 
   t = thread_current();
+  
   /* If load failed, quit. */
   if (success)
   {
@@ -171,7 +175,7 @@ start_process (void *command)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
-}
+} 
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -183,9 +187,10 @@ start_process (void *command)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid)
+process_wait (tid_t child_tid) 
 {
 	  struct thread *th;
+          int ret;
 
 	  th = get_thread_by_tid(child_tid);
 	  if (!th || th->status == THREAD_DYING || th->exit_status == EXIT_STATUS_INVALID)
@@ -193,18 +198,21 @@ process_wait (tid_t child_tid)
 	      	th->exit_status = EXIT_STATUS_INVALID;
 	      	return -1;
 	  }
+          // already successfully called for given TID
 	  if (th->exit_status != EXIT_STATUS_DEFAULT && th->exit_status != EXIT_STATUS_INVALID)
 	  {
-                int ret = th->exit_status;
+                ret = th->exit_status;
 	      	th->exit_status = EXIT_STATUS_INVALID;
 	      	return ret;
-
 	  }
 	  sema_down(&th->sem);
+          printf ("%s: exit(%d)\n", th->name, th->exit_status);
 	  while (th->status == THREAD_BLOCKED)
 	    	thread_unblock(th);
 
-	  return th->exit_status;
+          ret = th->exit_status;
+          th->exit_status = EXIT_STATUS_INVALID;
+	  return ret;
 }
 
 /* Free the current process's resources. */
@@ -222,6 +230,7 @@ void process_exit (void)
 	files_close_all(&thread_current()->files);
 	  
 	cur->exe = NULL;
+        cur->exit = true;
 
 	if (cur->parent)
 	{
@@ -230,7 +239,7 @@ void process_exit (void)
 	     intr_enable();
 	}
 
-	  /* Destroy the current process's page directory and switch back
+	 /* Destroy the current process's page directory and switch back
 	     to the kernel-only page directory. */
 	pd = cur->pagedir;
 	if (pd != NULL)
@@ -338,7 +347,9 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, const char *cmdstr, void (**eip) (void), void **esp)
+load (const char *file_name, const char *cmdstr, void (**eip) (void), void **esp) 
+/*bool
+load (const char *file_name, void (**eip) (void), void **esp)*/
 {
   log(L_TRACE, "load()");
   struct thread *t = thread_current ();
@@ -442,7 +453,7 @@ load (const char *file_name, const char *cmdstr, void (**eip) (void), void **esp
     }
 
   /* Set up stack. */
-  if (!setup_stack (cmdstr, esp))
+if (!setup_stack (cmdstr, esp))
     goto done;
 
   /* Start address. */
@@ -632,7 +643,7 @@ setup_stack (const char *cmdstr, void **esp)
 	  // hex_dump( *(int*)esp, *esp, 128, true ); // NOTE: uncomment this to check arg passing
     }
   return success;
-}
+} 
 
 void allocate_stack_argv(const char *cmdstr, void **esp, int argc, uint32_t *argv){
 

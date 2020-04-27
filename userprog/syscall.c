@@ -494,7 +494,6 @@ void sys_exit (int status)
         }
 
 	currentThread->exit_status = status;
-	printf ("%s: exit(%d)\n", currentThread->name, status);
 	// pass this status to a waiting parent
 	thread_exit(); //cleanup and de-allocation and waiting for parent to reap exit status
         return -1;

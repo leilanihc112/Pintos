@@ -230,6 +230,7 @@ thread_create (const char *name, int priority,
   if (thread_current() != initial_thread)
      list_push_back(&thread_current()->child_process, &t->child_elem);
   t->parent = thread_current();
+  t->exit = false;
 #endif
 
   return tid;
@@ -322,7 +323,7 @@ thread_exit (void)
   for (l = list_begin (&cur->child_process); l != list_end (&cur->child_process); l = list_next (l))
     {
       t = list_entry (l, struct thread, child_elem);
-      if (t->status == THREAD_BLOCKED)
+      if (t->status == THREAD_BLOCKED && t->exit)
         thread_unblock(t);
       else
       {
@@ -643,6 +644,7 @@ struct thread * get_thread_by_tid (tid_t tid)
         if (t->tid == tid)
            return t;
     }
+    return NULL;
 }
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
