@@ -72,7 +72,7 @@ In <thread.h>:
     #define EXIT_STATUS_INVALID 0xbadbadba   // Invalid exit status
 
     In struct thread:
-        struct semaphore sem;          // Semaphore for process_wait function synchronization 
+        struct semaphore sem;          // Semaphore for process_wait function synchronizaftion 
         int exit_status;               // Exit status of thread
         struct list files;             // List of files that have been opened
         struct file *exe;              // Image file on the disk
@@ -117,6 +117,12 @@ During syscalls, the user program passes its data to the kernel using pointers. 
 >> (e.g. calls to pagedir_get_page()) that might result?  What about
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
+
+Theoretically the least number of calls to pagedir_get_page for a full page of data would be 1 if pagedir_get_page returns back a page header and all the data is written contiguously. The greatest number of inspections required would be 4096 if the data is not written continguously since we'll need to check every if every location is valid. 
+
+For 2 bytes the same lower boundary applies just that instead of requiring that pagedir_get_page returns back a page header we just need it to return something that has at least 2 bytes behind it. The greatest number of inspections would be 2 if the data isnt written contiguously due to the same reason as above. 
+
+As far as the lower bound goes there doesnt seem to be any room for improvement. However on the upper bound there is a clear indicator that being able to write the data contiguously will provide an improvment of n fewer calls where n is how many continguous locations there are. 
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
