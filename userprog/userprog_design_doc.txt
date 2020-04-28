@@ -11,6 +11,7 @@
 Matt Dyl <mdyl@utexas.edu>
 Leilani Horlander-Cruz <leilanihc112@utexas.edu>
 
+
 ---- PRELIMINARIES ----
 
 >> If you have any preliminary comments on your submission, notes for the
@@ -30,11 +31,12 @@ Leilani Horlander-Cruz <leilanihc112@utexas.edu>
 
 struct fd_entry  // Struct to insert files and respective file descriptors list for the current thread
 {
-   int fd;
-   struct file *file;
-   struct list_elem elem;
-   struct list_elem t_elem;
+   int fd;                     // File descriptor
+   struct file *file;          // File
+   struct list_elem elem;      // List of open files
+   struct list_elem t_elem;    // List of open files in thread
 };
+
 
 ---- ALGORITHMS ----
 
@@ -43,20 +45,18 @@ struct fd_entry  // Struct to insert files and respective file descriptors list 
 >> How do you avoid overflowing the stack page?
 
 For argument parsing to work we had to make several modifications to process.c. 
+In process_execute, we first create a copy of the const char* command passed in and then use strtok_r to parse out the first parameter. This is so that we can set the thread name correctly in thread_create. We then follow a similiar process inside of start_process - if the number of arguments passed in is greater than 1, we once again create a copy of the command passed in and use strtok_r to parse out the first parameter, which will serve as our executable that will be passed into the load function. 
+Inside load, setup_stack is called, which is responsible for setting up our stack. The setup_stack function calls allocate_stack_argv which will perform the actual pushing of arguments onto the stack while storing each argv[i] location inside of an array called argv. It will conclude by calling stack_padding which performs the padding necessary in order to get the stack into the correct format. Once stack_padding has completed successfully, we increment the esp by 4 and set the last position to 0 as this is the argv[argc] location. 
+After allocate_stack_argv returns successfully, we later use the argv array to set up the rest of our stack by starting at the argc - 1 location of argv and decrementing down. In each iteration of this loop, we push the location stored at argv[i] and decrement the stack by 4. Once we've looped through all of the argv array, we then push the argv pointer onto the stack by pointing it to the previous "slot" with (*esp + 4). Argc will then be pushed to the stack with the value set to the number of arguments previously determined by the get_arg_count method. Finally, we set our return value to 0 and our stack has been set up. 
+We dont concern ourselves with a potential overflow of the stack page here and instead opt to check if esp is valid every time we need to use it. If the esp is not valid at that point in time, we use sys_exit(-1) to terminate the process.  
 
-In process_execute we first create a copy of the const char* command passed in and then use strtok_r to parse out the first parameter. This is so that we can set the thread name correctly in thread_create. We then follow a similiar process inside of start_process, if the number of arguments passed in is greater than 1 we once again create a copy of the command passed in and use strtok_r to parse out the first parameter which will serve as our executable that will be passed into the load function. 
-
-Inside load, setup_stack is called which is responsible for setting up our stack. The setup_stack function calls allocate_stack_argv which will perform the actual pushing of arguments onto the stack while storing each argv[i] location inside of an array called argv. It will conclude by calling stack_padding which performs the padding neccessary in order to get the stack into the correct format. Once stack_padding has completed successfully we increment the esp by 4 and set the last position to 0 as this is the argv[argc] location. 
-
- After allocate_stack_argv returns successfully, we later use the argv array to set up the rest of our stack by starting at the argc - 1 location of argv and decrementing down. In each iteration of this loop we push the location stored at argv[i] and decrement the stack by 4. Once we've looped through all of the argv array we then push the argv pointer onto the stack by pointing it to the previous "slot" with (*esp + 4). Argc will then be pushed to the stack with the value set to the number of arguments previously determined by the get_arg_count method. Finally we set our return value to 0 and our stack has been set up. 
-
- We dont concern ourselves with a potential overflow of the stack page here and instead opt to check if esp is valid every time we need to use it. If the esp is not valid at that point in time we use sys_exit(-1) to terminate the process.  
 
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
 strtok_r() is a reentrant version of strtok(). You can call this from multiple threads simultaneously or in nested loops. strtok_r() takes an extra argument and uses this argument to store the state to an externally specified location between calls rather than using a global variable. strtok() saves the pointer in an internal static variable. This is unsafe because you are probably invoking an undefined behavior. Another process can race this variable at the same time.
+
 
                              SYSTEM CALLS
                              ============
@@ -118,11 +118,10 @@ During syscalls, the user program passes its data to the kernel using pointers. 
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
-Theoretically the least number of calls to pagedir_get_page for a full page of data would be 1 if pagedir_get_page returns back a page header and all the data is written contiguously. The greatest number of inspections required would be 4096 if the data is not written continguously since we'll need to check every if every location is valid. 
+Theoretically, the least number of calls to pagedir_get_page for a full page of data would be 1 if pagedir_get_page returns back a page header and all the data is written contiguously. The greatest number of inspections required would be 4096 if the data is not written continguously since we'll need to check every if every location is valid. 
+For 2 bytes, the same lower boundary applies, but instead of requiring that pagedir_get_page returns back a page header, we just need it to return something that has at least 2 bytes behind it. The greatest number of inspections would be 2 if the data isnt written contiguously due to the same reason as above. 
+As far as the lower bound goes, there doesn't seem to be any room for improvement. However, on the upper bound, there is a clear indicator that being able to write the data contiguously will provide an improvment of n fewer calls where n is how many continguous locations there are. 
 
-For 2 bytes the same lower boundary applies just that instead of requiring that pagedir_get_page returns back a page header we just need it to return something that has at least 2 bytes behind it. The greatest number of inspections would be 2 if the data isnt written contiguously due to the same reason as above. 
-
-As far as the lower bound goes there doesnt seem to be any room for improvement. However on the upper bound there is a clear indicator that being able to write the data contiguously will provide an improvment of n fewer calls where n is how many continguous locations there are. 
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
