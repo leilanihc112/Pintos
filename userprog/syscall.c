@@ -59,7 +59,10 @@ syscall_handler (struct intr_frame *f UNUSED)
    UADDR is unmapped. */
 
 
-  check_address(user_esp);
+  if(!is_user_vaddr(user_esp) || pagedir_get_page(thread_current()->pagedir, user_esp) == NULL)
+  {
+      sys_exit(-1);
+  }
 
   callNo = (uint32_t)(*user_esp);
 
