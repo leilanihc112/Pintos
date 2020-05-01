@@ -1,224 +1,449 @@
                      +--------------------------+
-                     |         EE 461S          |
-                     | PROJECT 2: USER PROGRAMS |
+
+                     |         EE 382V          |
+
+                     | PROJECT 3: USER PROGRAMS |
+
                      |      DESIGN DOCUMENT     |
+
                      +--------------------------+
+
+
 
 ---- GROUP ----
 
+
+
 >> Fill in the names and email addresses of your group members.
 
+
+
 Matt Dyl <mdyl@utexas.edu>
+
 Leilani Horlander-Cruz <leilanihc112@utexas.edu>
+
+
+
 
 
 ---- PRELIMINARIES ----
 
+
+
 >> If you have any preliminary comments on your submission, notes for the
+
 >> TAs, or extra credit, please give them here.
+
 >> Please cite any offline or online sources you consulted while
+
 >> preparing your submission, other than the Pintos documentation, course
+
 >> text, lecture notes, and course staff.
 
+
+
                            ARGUMENT PASSING
+
                            ================
+
+
 
 ---- DATA STRUCTURES ----
 
+
+
 >> A1: Copy here the declaration of each new or changed `struct' or
+
 >> `struct' member, global or static variable, `typedef', or
+
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+
 struct fd_entry  // Struct to insert files and respective file descriptors list for the current thread
+
 {
+
    int fd;                     // File descriptor
+
    struct file *file;          // File
+
    struct list_elem elem;      // List of open files
+
    struct list_elem t_elem;    // List of open files in thread
+
 };
+
+
+
 
 
 ---- ALGORITHMS ----
 
+
+
 >> A2: Briefly describe how you implemented argument parsing.  How do
+
 >> you arrange for the elements of argv[] to be in the right order?
+
 >> How do you avoid overflowing the stack page?
 
+
+
 For argument parsing to work we had to make several modifications to process.c. 
+
 In process_execute, we first create a copy of the const char* command passed in and then use strtok_r to parse out the first parameter. This is so that we can set the thread name correctly in thread_create. We then follow a similiar process inside of start_process - if the number of arguments passed in is greater than 1, we once again create a copy of the command passed in and use strtok_r to parse out the first parameter, which will serve as our executable that will be passed into the load function. 
+
 Inside load, setup_stack is called, which is responsible for setting up our stack. The setup_stack function calls allocate_stack_argv which will perform the actual pushing of arguments onto the stack while storing each argv[i] location inside of an array called argv. It will conclude by calling stack_padding which performs the padding necessary in order to get the stack into the correct format. Once stack_padding has completed successfully, we increment the esp by 4 and set the last position to 0 as this is the argv[argc] location. 
+
 After allocate_stack_argv returns successfully, we later use the argv array to set up the rest of our stack by starting at the argc - 1 location of argv and decrementing down. In each iteration of this loop, we push the location stored at argv[i] and decrement the stack by 4. Once we've looped through all of the argv array, we then push the argv pointer onto the stack by pointing it to the previous "slot" with (*esp + 4). Argc will then be pushed to the stack with the value set to the number of arguments previously determined by the get_arg_count method. Finally, we set our return value to 0 and our stack has been set up. 
-We dont concern ourselves with a potential overflow of the stack page here and instead opt to check if esp is valid every time we need to use it. If the esp is not valid at that point in time, we use sys_exit(-1) to terminate the process.  
+
+We check if there is a potential page overflow on esp and also check if esp is valid whenever we need to use it. If the esp is not valid at that point in time or if it would overflow the stack page, we use sys_exit(-1) to terminate the process. 
+
+
+
 
 
 ---- RATIONALE ----
 
+
+
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+
 
 strtok_r() is a reentrant version of strtok(). You can call this from multiple threads simultaneously or in nested loops. strtok_r() takes an extra argument and uses this argument to store the state to an externally specified location between calls rather than using a global variable. strtok() saves the pointer in an internal static variable. This is unsafe because you are probably invoking an undefined behavior. Another process can race this variable at the same time.
 
 
+
+
+
                              SYSTEM CALLS
+
                              ============
+
+
 
 ---- DATA STRUCTURES ----
 
+
+
 >> B1: Copy here the declaration of each new or changed `struct' or
+
 >> `struct' member, global or static variable, `typedef', or
+
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+
 In <thread.h>:
+
     #define EXIT_STATUS_DEFAULT 0x600d600d   // Default exit status (one used for initialization of thread)
+
     #define EXIT_STATUS_INVALID 0xbadbadba   // Invalid exit status
 
+
+
     In struct thread:
+
         struct semaphore sem;          // Semaphore for process_wait function synchronizaftion 
+
         int exit_status;               // Exit status of thread
+
         struct list files;             // List of files that have been opened
+
         struct file *exe;              // Image file on the disk
+
         struct thread *parent;         // Parent process
+
         struct list child_process;     // List of child processes
+
         struct list_elem child_elem;   // List element for all child processes
 
+
+
 In thread.c:
+
     struct lock file_syslock;          // Lock to ensure that only one process can access the file system at a time     
 
+
+
 In syscall.c:
+
     struct fd_entry                    // Struct to insert files and respective file descriptors list for the current thread
+
 	{
+
 	   int fd;                     // File descriptor
+
 	   struct file *file;          // File
+
 	   struct list_elem elem;      // List of open files
+
 	   struct list_elem t_elem;    // List of open files in thread
+
 	};
+
+
 
     static struct list f_list;         // All open files list
 
 
+
+
+
 >> B2: Describe how file descriptors are associated with open files.
+
 >> Are file descriptors unique within the entire OS or just within a
+
 >> single process?
 
+
+
 For each thread, there is a list of files that have been opened. 
+
 File descriptors are unique within a single process. Since file descriptors are like an index number, different processes can use the same file descriptor while pointing to different files.
+
+
+
 
 
 ---- ALGORITHMS ----
 
+
+
 >> B3: Describe your code for reading and writing user data from the
+
 >> kernel.
 
-During syscalls, the user program passes its data to the kernel using pointers. Before dereferencing the pointer, we check the validity of the address by invoking the check_address() function. If the pointer is invalid, the process is killed by invoking sysexit(-1). This allows for accessing memory directly without issues of invalid address.
+
+
+During syscalls, the user program passes its data to the kernel using pointers. Before dereferencing the pointer, we check the validity of the address by invoking the check_address() function. If the pointer is invalid, the process is killed by invoking sys_exit(-1). This allows for accessing memory directly without issues of invalid address.
+
+
+
 
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
+
 >> to be copied from user space into the kernel.  What is the least
+
 >> and the greatest possible number of inspections of the page table
+
 >> (e.g. calls to pagedir_get_page()) that might result?  What about
+
 >> for a system call that only copies 2 bytes of data?  Is there room
+
 >> for improvement in these numbers, and how much?
 
+
+
 Theoretically, the least number of calls to pagedir_get_page for a full page of data would be 1 if pagedir_get_page returns back a page header and all the data is written contiguously. The greatest number of inspections required would be 4096 if the data is not written continguously since we'll need to check every if every location is valid. 
-For 2 bytes, the same lower boundary applies, but instead of requiring that pagedir_get_page returns back a page header, we just need it to return something that has at least 2 bytes behind it. The greatest number of inspections would be 2 if the data isnt written contiguously due to the same reason as above. 
-As far as the lower bound goes, there doesn't seem to be any room for improvement. However, on the upper bound, there is a clear indicator that being able to write the data contiguously will provide an improvment of n fewer calls where n is how many continguous locations there are. 
+
+For 2 bytes, the same lower boundary applies, but instead of requiring that pagedir_get_page returns back a page header, we just need it to return something that has at least 2 bytes behind it. The greatest number of inspections would be 2 if the data isn't written contiguously due to the same reason as above. 
+
+As far as the lower bound goes, there doesn't seem to be any room for improvement. However, on the upper bound, there is a clear indicator that being able to write the data contiguously will provide an improvement of n fewer calls where n is how many continguous locations there are. 
+
+
+
 
 
 >> B5: Briefly describe your implementation of the "wait" system call
+
 >> and how it interacts with process termination.
 
+
+
 First, we find the thread using the tid that is passed in. If the thread was not able to be found (TID is invalid), or the thread is in the dying state, or the exit status is EXIT_STATUS_INVALID, we set the exit status to EXIT_STATUS_INVALID and return -1 because something went wrong. 
+
 If the exit status is not EXIT_STATUS_DEFAULT or EXIT_STATUS_INVALID, we set exit status to EXIT_STATUS_INVALID and return the original exit status of the thread. 
+
 We then call the sema_down on the thread's semaphore, and if the thread's status is THREAD_BLOCKED, we unblock the thread. Then we set exit status of the thread to EXIT_STATUS_INVALID and return the original exit status of the thread.
+
 The reason for changing the EXIT_STATUS_INVALID is because each child process can be waited on only once.
 
 
+
+
+
 >> B6: Any access to user program memory at a user-specified address
+
 >> can fail due to a bad pointer value.  Such accesses must cause the
+
 >> process to be terminated.  System calls are fraught with such
+
 >> accesses, e.g. a "write" system call requires reading the system
+
 >> call number from the user stack, then each of the call's three
+
 >> arguments, then an arbitrary amount of user memory, and any of
+
 >> these can fail at any point.  This poses a design and
+
 >> error-handling problem: how do you best avoid obscuring the primary
+
 >> function of code in a morass of error-handling?  Furthermore, when
+
 >> an error is detected, how do you ensure that all temporarily
+
 >> allocated resources (locks, buffers, etc.) are freed?  In a few
+
 >> paragraphs, describe the strategy or strategies you adopted for
+
 >> managing these issues.  Give an example.
 
-In order to protect against an invalid user-specified address, the function check_address() is called for each argument for each system call to make sure that the pointer is a virtual address, which tests to make sure the pointer is less than PHYS_BASE, so it is not a kernel pointer. If it is, we exit the process.
+
+
+In order to protect against an invalid user-specified address, we validate every single pointer we encounter by calling pagedir_get_page(), 
+
+on the pointer and checking that the returned value is not null. This ensures that the pointer references a valid address that is mapped the page directory. We also check that the pointer is a virtual address by calling the function, check_address(), for each pointer we access for each system call. This function tests to make sure the pointer is less than PHYS_BASE, so it is not a kernel pointer. If it is, we exit the process.
+
 For each system call that takes a pointer argument, such as a buffer or char*, the pointer is validated in the same manner as above. These arguments are also passed with size to check the pointer to the end of the buffer or char* to ensure that that pointer is also valid.
+
 An example of this is the sys_read system call. First, the syscall_handler identifies that the syscall is a write syscall. It then checks the address on the esp pointer of the interrupt frame. The arguments structure for the write syscall function are populated after validating the three addresses above the esp pointer by calling check_address on each. After this, the write syscall is invoked with the validated arguments. The pointer to the buffer pointer is then dereferenced and validated in the manner described above.
 
+
+
  
+
 ---- SYNCHRONIZATION ----
 
+
+
 >> B7: The "exec" system call returns -1 if loading the new executable
+
 >> fails, so it cannot return before the new executable has completed
+
 >> loading.  How does your code ensure this?  How is the load
+
 >> success/failure status passed back to the thread that calls "exec"?
 
+
+
 When exec is called, after thread_create is called, the current process will wait until the child process finishes loading. If the child process successfully loads, it will open the executable in the file system and will prevent writing to the file, then will sema_up its semaphore. If it fails, it will set its exit_status to -1 and then will sema_up its semaphore. 
+
 The parent process will then check the exit_status of the child process. If it is -1, it will return TID_ERROR (-1).
 
 
+
+
+
 >> B8: Consider parent process P with child process C.  How do you
+
 >> ensure proper synchronization and avoid race conditions when P
+
 >> calls wait(C) before C exits?  After C exits?  How do you ensure
+
 >> that all resources are freed in each case?  How about when P
+
 >> terminates without waiting, before C exits?  After C exits?  Are
+
 >> there any special cases?
 
+
+
 When P calls wait(C) before C exits, it will sema_down C's semaphore. C will only sema_up its semaphore when it exits. Since each child has its own semaphore and each child only has one parent, race conditions are avoided. 
+
 When P calls wait(C) after C exits, since C already sema_up its semaphore when it exited, P will not wait on this when P calls sema_down on the semaphore. There are no race conditions in this case because there is only one live process accessing the semaphore. 
+
 P always exits after C. Therefore, when C exits, it will not free its own exit_status because P might look at it later. When P exits, it will free the exit_status of C. P will also free its own exit status if its parent has exited. 
+
 When P terminates without waiting before C exits, C's parent pointer will be nulled out and P's list of child_processes is freed, along with all of its other allocated data. 
+
 When P terminates without waiting after C exits, P's data will be freed.
+
 If C terminates because of an exception, the child_process list will be updated for C in P.
+
+
+
 
 
 ---- RATIONALE ----
 
+
+
 >> B9: Why did you choose to implement access to user memory from the
+
 >> kernel in the way that you did?
+
+
 
 The validation for the user_esp pointer is checked before each system call within the syscall_handler. This is because each case can have the same address validation before invoking the syscall function that is to be invoked. Making sure that the address is not a kernel address and is instead a virtual address allows to make sure that it is a valid address for us to access.
 
 
+
+
+
 >> B10: What advantages or disadvantages can you see to your design
+
 >> for file descriptors?
 
+
+
 Advantages: Regardless of whether the file descriptors are created by pipe or open, the same structure can store the information and can be used in the same way. Because each thread has its own list of files, there is no limit on the number of open file descriptors until there is no memory left.
+
 Disadvantages: Accessing a file by file descriptor within the list takes time of O(n). Many duplicate file descriptor structs also exist since each thread has structs for these file descriptors. 
 
 
+
+
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
+
 >> If you changed it, what advantages are there to your approach?
+
+
 
 This was not changed in our implementation.
 
 
 
+
+
+
+
                            SURVEY QUESTIONS
+
                            ================
 
+
+
 Answering these questions is optional, but it will help us improve the
+
 course in future quarters.  Feel free to tell us anything you
+
 want -- these questions are just to spur your thoughts.  You may also
+
 choose to respond anonymously in the course evaluations at the end of
+
 the semester.
 
+
+
 >> In your opinion, was this assignment, or any one of the three problems
+
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+
+
 >> Did you find that working on a particular part of the assignment gave
+
 >> you greater insight into some aspect of OS design?
 
+
+
 >> Is there some particular fact or hint we should give students in
+
 >> future quarters to help them solve the problems?  Conversely, did you
+
 >> find any of our guidance to be misleading?
 
+
+
 >> Do you have any suggestions for the TAs to more effectively assist
+
 >> students, either for future quarters or the remaining projects?
+
+
 
 >> Any other comments?
