@@ -1,7 +1,7 @@
 Pintos
 ======
 
-Pintos labs for EE 382V at UT Austin.
+Pintos labs
 
 
 Installation
@@ -98,8 +98,3 @@ Next, you will have to attach GDB to the Pintos process. You can do this using t
 Now, GDB is ready to debug. If the Pintos process ever hangs and you are unable to kill it with control-C, try `pkill pintos`.
 
 <img src=".assets/debugging-3.png" alt="Continuing to process_execute" class="center" width=600>
-
-Project Submission
-------------------
-
-Submit your code as a single file named  project.tgz on Canvas. Do not forget to complete the design document.
